@@ -1,8 +1,14 @@
 #!/usr/bin/env nextflow
 nextflow.enable.dsl=2
 
-// Copyright (c) 2025 Alejandro Gonzalez-Irribarren <alejandrxgzi@gmail.com>
+// Copyright (c) 2025 Alejandro Gonzales-Irribarren <alejandrxgzi@gmail.com>
 // Distributed under the terms of the Apache License, Version 2.0.
+
+/*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    XORF — Main subworkflow: chunks input, gets candidates, predicts ORFs, concatenates results
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*/
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -14,6 +20,7 @@ include { CHUNKER }      from '../../modules/chunker/main.nf'
 include { CONCAT }       from '../../modules/concat/main.nf'
 include { CONCAT as CONCAT_RAW }   from '../../modules/concat/main.nf'
 include { GENOMEMASK_SELENO } from '../../modules/genomemask/seleno/main.nf'
+include { GENEPRED_LINT } from '../../modules/genepred/lint/main.nf'
 
 include { PREDICT_ORFS } from '../predict_orfs/main.nf'
 include { GET_CANDIDATES } from '../candidates/main.nf'
@@ -42,6 +49,10 @@ workflow XORF {
       def chunkSize   = chunk_size ?: 20
 
       def ch_versions = Channel.empty()
+
+      GENEPRED_LINT(
+        ch_regions
+      )
 
       if (selenocysteine_sites) {
           GENOMEMASK_SELENO(
