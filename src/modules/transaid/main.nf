@@ -52,8 +52,7 @@ process TRANSAID {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        orf-samba: \$(orf --version 2>&1 | sed 's/^.*orf //; s/ .*\$//')
-        rnasamba: \$(rnasamba --version 2>&1 | tail -n 1 | sed 's/^rnasamba //')
+         transaid: \$(transaid --version 2>&1 | sed 's/.*Version: //')
     END_VERSIONS
     """
 }

@@ -33,7 +33,7 @@ process NETSTART {
     -in $sequence \\
     -compute_device cpu \\
     -o chordata \\
-    -out ${meta.id}_netstart
+    -out ${meta.id}_netstart \\
     $args
 
     PREDICTION_COUNT=\$(wc -l < ${meta.id}*csv)
@@ -50,8 +50,7 @@ process NETSTART {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        orf-samba: \$(orf --version 2>&1 | sed 's/^.*orf //; s/ .*\$//')
-        rnasamba: \$(rnasamba --version 2>&1 | tail -n 1 | sed 's/^rnasamba //')
+        netstart2: \$(netstart2 --version 2>&1 | sed 's/.*Version: //')
     END_VERSIONS
     """
 }
