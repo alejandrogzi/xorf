@@ -20,6 +20,11 @@ process NETSTART {
     script:
     def args = task.ext.args ?: ''
     """
+    export HF_HOME="\${PWD}/.hf_cache"
+    export TRANSFORMERS_CACHE="\${PWD}/.hf_cache"
+    export HF_HUB_CACHE="\${PWD}/.hf_cache"
+    mkdir -p "\$HF_HOME"
+
     netstart2 \\
     -in $sequence \\
     -compute_device cpu \\
@@ -27,7 +32,11 @@ process NETSTART {
     -out ${meta.id}_netstart
     $args
 
-    PREDICTION_COUNT=\$(wc -l < ${meta.id}*csv)
+    if [ -f ${meta.id}_netstart.csv ]; then
+        PREDICTION_COUNT=\$(wc -l < ${meta.id}_netstart.csv)
+    else
+        PREDICTION_COUNT=0
+    fi
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
