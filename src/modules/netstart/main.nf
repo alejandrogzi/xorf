@@ -1,3 +1,12 @@
+// Copyright (c) 2025 Alejandro Gonzales-Irribarren <alejandrxgzi@gmail.com>
+// Distributed under the terms of the Apache License, Version 2.0.
+
+/*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    NETSTART — Predicts translation initiation sites using neural networks
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*/
+
 process NETSTART {
     tag "$meta.id:$meta.name"
     label 'process_single'
@@ -29,7 +38,7 @@ process NETSTART {
     -in $sequence \\
     -compute_device cpu \\
     -o chordata \\
-    -out ${meta.id}_netstart
+    -out ${meta.id}_netstart \\
     $args
 
     if [ -f ${meta.id}_netstart.csv ]; then
@@ -50,8 +59,7 @@ process NETSTART {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        orf-samba: \$(orf --version 2>&1 | sed 's/^.*orf //; s/ .*\$//')
-        rnasamba: \$(rnasamba --version 2>&1 | tail -n 1 | sed 's/^rnasamba //')
+        netstart2: \$(netstart2 --version 2>&1 | sed 's/.*Version: //')
     END_VERSIONS
     """
 }
