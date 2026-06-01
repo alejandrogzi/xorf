@@ -12,7 +12,7 @@
 //! heavily parallelized to offer fast performance on large datasets.
 
 use genepred::GenePred;
-use hashbrown::{HashMap, hash_map::Entry};
+use hashbrown::{hash_map::Entry, HashMap};
 use log::{debug, info, warn};
 use memchr::memchr;
 use memmap2::Mmap;
@@ -21,7 +21,7 @@ use std::collections::HashSet;
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
-use std::str::{FromStr, from_utf8};
+use std::str::{from_utf8, FromStr};
 use std::sync::Arc;
 
 use crate::{cli::BlastArgs, consts::*, utils::*};
