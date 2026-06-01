@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<title>xorf — pipeline map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  :root{
+    /* Hiller Lab palette — navy / indigo / warm paper */
+    --ink:#1b2350;
+    --ink-2:#2b3570;
+    --muted:#6b7390;
+    --paper:#f5f2ea;
+    --paper-2:#ece7d9;
+    --rule:#d9d3c1;
+
+    /* Zone fills */
+    --zone-inputs-bg:#fdf3db;       /* warm cream */
+    --zone-inputs-stroke:#b7791f;
+    --zone-pipeline-bg:#eef1fb;     /* cool indigo-tinted paper */
+    --zone-pipeline-stroke:#3a4fc4;
+    --zone-candidate-bg:#e3e8f6;    /* slightly deeper indigo paper */
+    --zone-candidate-stroke:#2a3a9e;
+    --zone-outputs-bg:#dff4ee;      /* mint/teal cream */
+    --zone-outputs-stroke:#0f766e;
+
+    /* Node fills */
+    --node-input:#fff4dc;
+    --node-input-stroke:#b7791f;
+    --node-process:#eef1fb;
+    --node-process-stroke:#3a4fc4;
+    --node-highlight:#1b2350;       /* emphasized process (highlighted) */
+    --node-output:#cfeee2;
+    --node-output-stroke:#0f766e;
+    --node-optional:#f1e9fb;
+    --node-optional-stroke:#805ad5;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--paper);color:var(--ink);font-family:'Inter',system-ui,sans-serif;-webkit-font-smoothing:antialiased}
+  body{min-height:100vh;display:flex;justify-content:center;padding:40px 28px 72px}
+  .sheet{width:min(1500px,100%)}
+
+  /* Header */
+  .head{display:flex;align-items:flex-end;justify-content:space-between;gap:32px;margin-bottom:22px;padding-bottom:18px;border-bottom:1px solid var(--rule)}
+  .mark{font-family:'JetBrains Mono',monospace;font-weight:600;font-size:12px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase}
+  .title{font-weight:800;font-size:72px;letter-spacing:-.035em;line-height:.9;color:var(--ink);margin-top:6px}
+  .title .slash{color:var(--muted);font-weight:500}
+  .title .sub{font-weight:500;color:var(--ink-2)}
+  .subtitle{font-size:15px;color:var(--muted);margin-top:10px;max-width:54ch}
+  .lab{text-align:right;font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:.04em}
+  .lab strong{display:block;color:var(--ink);font-family:'Inter',sans-serif;font-weight:700;font-size:14px;letter-spacing:0;margin-bottom:4px}
+
+  /* Legend */
+  .legend{display:flex;flex-wrap:wrap;gap:16px 28px;align-items:center;padding:12px 16px;border:1px solid var(--rule);background:rgba(255,255,255,.45);border-radius:4px;margin-bottom:24px}
+  .lg{display:flex;align-items:center;gap:10px;font-size:12.5px;color:var(--ink)}
+  .lg .chip{width:22px;height:14px;border-radius:3px;border:1px solid}
+  .lg code{font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted)}
+  .lg .div{width:1px;height:18px;background:var(--rule)}
+  .lg .dash{width:28px;height:0;border-top:2.5px dashed var(--ink);opacity:.8}
+  .lg .solid{width:28px;height:0;border-top:2.5px solid var(--ink);opacity:.9}
+
+  .map{background:var(--paper);border:1px solid var(--rule);border-radius:6px;padding:18px}
+  .map svg{display:block;width:100%;height:auto}
+
+  .sv-zone{font-family:'Inter',sans-serif;font-weight:700;font-size:12px;letter-spacing:.14em;text-transform:uppercase}
+  .sv-node-title{font-family:'Inter',sans-serif;font-weight:600;font-size:13px;fill:var(--ink)}
+  .sv-node-tool{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:12px;fill:var(--ink);letter-spacing:-.01em}
+  .sv-node-sub{font-family:'JetBrains Mono',monospace;font-weight:500;font-size:10.5px;fill:var(--muted);letter-spacing:0}
+  .sv-node-hl{fill:#fff}
+  .sv-edge{font-family:'JetBrains Mono',monospace;font-size:10px;fill:var(--muted)}
+
+  .foot{display:flex;justify-content:space-between;margin-top:20px;padding-top:14px;border-top:1px solid var(--rule);font-family:'JetBrains Mono',monospace;font-size:11.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <header class="head">
+    <div>
+      <div class="mark">Pipeline · v1.0</div>
+      <div class="title"><span class="sub">hillerlab</span><span class="slash"> /</span> xorf</div>
+      <div class="subtitle">Comprehensive prediction of open reading frames — candidate generation, homology support, and consensus scoring across chunked genomic regions.</div>
+    </div>
+    <div class="lab">
+      <strong>Hiller Lab</strong>
+      comparative genomics<br/>
+    </div>
+  </header>
+
+  <div class="legend">
+    <div class="lg"><span class="chip" style="background:var(--node-input);border-color:var(--node-input-stroke)"></span>Input <code>fasta · bed · tsv</code></div>
+    <div class="lg"><span class="chip" style="background:var(--node-process);border-color:var(--node-process-stroke)"></span>Process</div>
+    <div class="lg"><span class="chip" style="background:var(--node-highlight);border-color:var(--node-highlight)"></span>Highlighted step</div>
+    <div class="lg"><span class="chip" style="background:var(--node-optional);border-color:var(--node-optional-stroke)"></span>Optional</div>
+    <div class="lg"><span class="chip" style="background:var(--node-output);border-color:var(--node-output-stroke)"></span>Output</div>
+    <div class="div"></div>
+    <div class="lg"><span class="solid"></span>required flow</div>
+    <div class="lg"><span class="dash"></span>conditional flow</div>
+  </div>
+
+  <div class="map">
+    <svg viewBox="0 0 1500 720" xmlns="http://www.w3.org/2000/svg" aria-label="xorf pipeline map">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="var(--ink)"/>
+        </marker>
+        <marker id="arrow-dash" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" fill="#6b7390"/>
+        </marker>
+      </defs>
+
+      <!-- ============ ZONE: INPUTS ============ -->
+      <g>
+        <rect x="30" y="60" width="200" height="600" rx="8" fill="var(--zone-inputs-bg)" stroke="var(--zone-inputs-stroke)" stroke-width="1.2" stroke-dasharray="4 4" opacity=".9"/>
+        <text x="48" y="84" class="sv-zone" fill="var(--zone-inputs-stroke)">Inputs</text>
+
+        <!-- Input regions -->
+        <g>
+          <rect x="52" y="120" width="156" height="56" rx="6" fill="var(--node-input)" stroke="var(--node-input-stroke)" stroke-width="1.5"/>
+          <text x="130" y="145" text-anchor="middle" class="sv-node-title">Input regions</text>
+          <text x="130" y="162" text-anchor="middle" class="sv-node-sub">bed · genepred</text>
+        </g>
+        <!-- Genome sequence -->
+        <g>
+          <rect x="52" y="250" width="156" height="56" rx="6" fill="var(--node-input)" stroke="var(--node-input-stroke)" stroke-width="1.5"/>
+          <text x="130" y="275" text-anchor="middle" class="sv-node-title">Genome sequence</text>
+          <text x="130" y="292" text-anchor="middle" class="sv-node-sub">fasta</text>
+        </g>
+        <!-- Selenocysteine sites -->
+        <g>
+          <rect x="52" y="360" width="156" height="56" rx="6" fill="var(--node-input)" stroke="var(--node-input-stroke)" stroke-width="1.5"/>
+          <text x="130" y="385" text-anchor="middle" class="sv-node-title">Selenocysteine sites</text>
+          <text x="130" y="402" text-anchor="middle" class="sv-node-sub">optional · tsv</text>
+        </g>
+        <!-- Protein database -->
+        <g>
+          <rect x="52" y="545" width="156" height="56" rx="6" fill="var(--node-input)" stroke="var(--node-input-stroke)" stroke-width="1.5"/>
+          <text x="130" y="570" text-anchor="middle" class="sv-node-title">Protein database</text>
+          <text x="130" y="587" text-anchor="middle" class="sv-node-sub">fasta · blast db</text>
+        </g>
+      </g>
+
+      <!-- ============ ZONE: XORF PIPELINE ============ -->
+      <g>
+        <rect x="270" y="60" width="980" height="600" rx="8" fill="var(--zone-pipeline-bg)" stroke="var(--zone-pipeline-stroke)" stroke-width="1.2" stroke-dasharray="4 4" opacity=".85"/>
+        <text x="760" y="84" text-anchor="middle" class="sv-zone" fill="var(--zone-pipeline-stroke)">XORF pipeline</text>
+
+        <!-- GENEPRED_LINT -->
+        <g>
+          <rect x="300" y="120" width="150" height="56" rx="6" fill="var(--node-process)" stroke="var(--node-process-stroke)" stroke-width="1.5"/>
+          <text x="375" y="145" text-anchor="middle" class="sv-node-tool">GENEPRED_LINT</text>
+          <text x="375" y="162" text-anchor="middle" class="sv-node-sub">validate regions</text>
+        </g>
+
+        <!-- GENOMEMASK_SELENO -->
+        <g>
+          <rect x="300" y="300" width="150" height="56" rx="6" fill="var(--node-process)" stroke="var(--node-process-stroke)" stroke-width="1.5"/>
+          <text x="375" y="322" text-anchor="middle" class="sv-node-tool" style="font-size:11px">GENOMEMASK_SELENO</text>
+          <text x="375" y="340" text-anchor="middle" class="sv-node-sub">mask Sec residues</text>
+        </g>
+
+        <!-- CHUNKER -->
+        <g>
+          <rect x="490" y="210" width="130" height="56" rx="6" fill="var(--node-process)" stroke="var(--node-process-stroke)" stroke-width="1.5"/>
+          <text x="555" y="235" text-anchor="middle" class="sv-node-tool">CHUNKER</text>
+          <text x="555" y="252" text-anchor="middle" class="sv-node-sub">chunk &amp; pair</text>
+        </g>
+
+        <!-- ===== Candidate generation nested zone ===== -->
+        <rect x="650" y="105" width="440" height="460" rx="6" fill="var(--zone-candidate-bg)" stroke="var(--zone-candidate-stroke)" stroke-width="1" stroke-dasharray="3 4" opacity=".9"/>
+        <text x="870" y="128" text-anchor="middle" class="sv-zone" fill="var(--zone-candidate-stroke)">Candidate generation</text>
+
+        <!-- TRANSLATIONAI (highlighted / dark) -->
+        <g>
+          <rect x="810" y="150" width="140" height="52" rx="6" fill="var(--node-highlight)" stroke="var(--node-highlight)" stroke-width="1.5"/>
+          <text x="880" y="175" text-anchor="middle" class="sv-node-tool" style="fill:#fff">TRANSLATIONAI</text>
+          <text x="880" y="191" text-anchor="middle" class="sv-node-sub" style="fill:#c4cbe6">translation signals</text>
+        </g>
+
+        <!-- RNASAMBA -->
+        <g>
+          <rect x="670" y="340" width="120" height="52" rx="6" fill="var(--node-process)" stroke="var(--node-process-stroke)" stroke-width="1.5"/>
+          <text x="730" y="365" text-anchor="middle" class="sv-node-tool">RNASAMBA</text>
+          <text x="730" y="381" text-anchor="middle" class="sv-node-sub">coding potential</text>
+        </g>
+
+        <!-- NETSTART -->
+        <g>
+          <rect x="810" y="260" width="120" height="52" rx="6" fill="var(--node-process)" stroke="var(--node-process-stroke)" stroke-width="1.5"/>
+          <text x="870" y="285" text-anchor="middle" class="sv-node-tool">NETSTART</text>
+          <text x="870" y="301" text-anchor="middle" class="sv-node-sub">start codons</text>
+        </g>
+
+        <!-- TRANSAID -->
+        <g>
+          <rect x="810" y="420" width="120" height="52" rx="6" fill="var(--node-process)" stroke="var(--node-process-stroke)" stroke-width="1.5"/>
+          <text x="870" y="445" text-anchor="middle" class="sv-node-tool">TRANSAID</text>
+          <text x="870" y="461" text-anchor="middle" class="sv-node-sub">stop / frames</text>
+        </g>
+
+        <!-- JOIN_NETS -->
+        <g>
+          <rect x="950" y="340" width="120" height="52" rx="6" fill="var(--node-process)" stroke="var(--node-process-stroke)" stroke-width="1.5"/>
+          <text x="1010" y="365" text-anchor="middle" class="sv-node-tool">JOIN_NETS</text>
+          <text x="1010" y="381" text-anchor="middle" class="sv-node-sub">merge nets</text>
+        </g>
+
+        <!-- BLAST (highlighted) -->
+        <g>
+          <rect x="1110" y="230" width="120" height="52" rx="6" fill="var(--node-highlight)" stroke="var(--node-highlight)" stroke-width="1.5"/>
+          <text x="1170" y="255" text-anchor="middle" class="sv-node-tool" style="fill:#fff">BLAST</text>
+          <text x="1170" y="271" text-anchor="middle" class="sv-node-sub" style="fill:#c4cbe6">homology search</text>
+        </g>
+
+        <!-- PREDICT (highlighted) -->
+        <g>
+          <rect x="1110" y="440" width="120" height="52" rx="6" fill="var(--node-highlight)" stroke="var(--node-highlight)" stroke-width="1.5"/>
+          <text x="1170" y="465" text-anchor="middle" class="sv-node-tool" style="fill:#fff">PREDICT</text>
+          <text x="1170" y="481" text-anchor="middle" class="sv-node-sub" style="fill:#c4cbe6">score &amp; filter</text>
+        </g>
+
+        <!-- CONCAT -->
+        <g>
+          <rect x="1120" y="595" width="110" height="50" rx="6" fill="var(--node-process)" stroke="var(--node-process-stroke)" stroke-width="1.5"/>
+          <text x="1175" y="619" text-anchor="middle" class="sv-node-tool">CONCAT</text>
+          <text x="1175" y="635" text-anchor="middle" class="sv-node-sub">final</text>
+        </g>
+
+        <!-- CONCAT_RAW (optional) -->
+        <g>
+          <rect x="950" y="595" width="130" height="50" rx="6" fill="var(--node-optional)" stroke="var(--node-optional-stroke)" stroke-width="1.5" stroke-dasharray="4 4"/>
+          <text x="1015" y="619" text-anchor="middle" class="sv-node-tool">CONCAT_RAW</text>
+          <text x="1015" y="635" text-anchor="middle" class="sv-node-sub">optional</text>
+        </g>
+      </g>
+
+      <!-- ============ ZONE: OUTPUTS ============ -->
+      <g>
+        <rect x="1290" y="60" width="180" height="600" rx="8" fill="var(--zone-outputs-bg)" stroke="var(--zone-outputs-stroke)" stroke-width="1.2" stroke-dasharray="4 4" opacity=".9"/>
+        <text x="1380" y="84" text-anchor="middle" class="sv-zone" fill="var(--zone-outputs-stroke)">Outputs</text>
+
+        <!-- Final ORF results -->
+        <g>
+          <rect x="1308" y="400" width="144" height="64" rx="6" fill="var(--node-output)" stroke="var(--node-output-stroke)" stroke-width="1.5"/>
+          <text x="1380" y="422" text-anchor="middle" class="sv-node-title">Final ORF results</text>
+          <text x="1380" y="440" text-anchor="middle" class="sv-node-sub">BED · TSV</text>
+          <text x="1380" y="456" text-anchor="middle" class="sv-node-sub" style="fill:var(--node-output-stroke)">primary</text>
+        </g>
+
+        <!-- Raw predictions -->
+        <g>
+          <rect x="1308" y="570" width="144" height="64" rx="6" fill="var(--node-output)" stroke="var(--node-output-stroke)" stroke-width="1.5" stroke-dasharray="4 4"/>
+          <text x="1380" y="592" text-anchor="middle" class="sv-node-title">Raw predictions</text>
+          <text x="1380" y="610" text-anchor="middle" class="sv-node-sub">BED · TSV</text>
+          <text x="1380" y="626" text-anchor="middle" class="sv-node-sub" style="fill:var(--node-output-stroke)">optional</text>
+        </g>
+      </g>
+
+      <!-- ============ CONNECTORS (orthogonal) ============ -->
+      <g fill="none" stroke="var(--ink)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <!-- regions -> GENEPRED_LINT -->
+        <path d="M208,148 H300" marker-end="url(#arrow)"/>
+        <!-- GENEPRED_LINT -> CHUNKER -->
+        <path d="M450,148 H470 Q490,148 490,168 V222 Q490,238 498,238 H490" marker-end="url(#arrow)"/>
+        <!-- cleaner: GENEPRED_LINT -> CHUNKER right-then-down -->
+      </g>
+
+      <!-- redo main connectors cleanly -->
+      <g fill="none" stroke="var(--ink)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <!-- GENEPRED_LINT -> CHUNKER (top-in) -->
+        <path d="M450,148 H470 Q490,148 490,168 V210" marker-end="url(#arrow)"/>
+
+        <!-- CHUNKER -> RNASAMBA -->
+        <path d="M555,266 V320 Q555,340 575,340 H670" marker-end="url(#arrow)"/>
+        <!-- CHUNKER -> TRANSLATIONAI -->
+        <path d="M620,238 H700 Q730,238 730,200 Q730,176 810,176" marker-end="url(#arrow)"/>
+
+        <!-- RNASAMBA -> NETSTART -->
+        <path d="M790,354 H800 Q810,354 810,320 V286" marker-end="url(#arrow)"/>
+        <!-- RNASAMBA -> TRANSAID -->
+        <path d="M790,378 H800 Q810,378 810,410 V446" marker-end="url(#arrow)"/>
+        <!-- RNASAMBA -> JOIN_NETS (middle) -->
+        <path d="M790,366 H940 Q950,366 950,366" marker-end="url(#arrow)"/>
+
+        <!-- NETSTART -> JOIN_NETS -->
+        <path d="M930,286 H945 Q960,286 960,306 V340" marker-end="url(#arrow)"/>
+        <!-- TRANSAID -> JOIN_NETS -->
+        <path d="M930,446 H945 Q960,446 960,426 V392" marker-end="url(#arrow)"/>
+
+        <!-- JOIN_NETS -> BLAST -->
+        <path d="M1070,354 H1088 Q1110,354 1110,318 V282" marker-end="url(#arrow)"/>
+        <!-- TRANSLATIONAI -> BLAST -->
+        <path d="M950,176 H1080 Q1110,176 1110,208 V230" marker-end="url(#arrow)"/>
+        <!-- database -> BLAST (long curve) -->
+        <path d="M208,573 H1090 Q1110,573 1110,545 V282" marker-end="url(#arrow)"/>
+
+        <!-- BLAST -> PREDICT -->
+        <path d="M1170,282 V440" marker-end="url(#arrow)"/>
+        <!-- RNASAMBA -> PREDICT (long curve under) -->
+        <path d="M730,392 V510 Q730,525 750,525 H1090 Q1110,525 1110,505 V466 H1110" marker-end="url(#arrow)"/>
+
+        <!-- PREDICT -> CONCAT -->
+        <path d="M1170,492 V595" marker-end="url(#arrow)"/>
+      </g>
+
+      <!-- Dashed conditional connectors -->
+      <g fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="5 5">
+        <!-- sequence -.-> GENOMEMASK_SELENO -->
+        <path d="M208,278 H260 Q280,278 280,298 V328 H300" marker-end="url(#arrow-dash)"/>
+        <!-- seleno -.-> GENOMEMASK_SELENO -->
+        <path d="M208,388 H260 Q280,388 280,358 V328 H300" marker-end="url(#arrow-dash)"/>
+        <!-- GENOMEMASK_SELENO -.-> CHUNKER -->
+        <path d="M450,328 H470 Q490,328 490,308 V266" marker-end="url(#arrow-dash)"/>
+        <!-- PREDICT -.-> CONCAT_RAW -->
+        <path d="M1110,466 H1090 Q1070,466 1070,540 V595" marker-end="url(#arrow-dash)"/>
+        <!-- CONCAT_RAW -.-> raw_results -->
+        <path d="M1080,620 H1250 Q1280,620 1290,602 H1308" marker-end="url(#arrow-dash)"/>
+      </g>
+
+      <!-- Solid output connector -->
+      <g fill="none" stroke="var(--ink)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <!-- CONCAT -> results -->
+        <path d="M1230,620 H1260 Q1290,620 1290,580 V432 H1308" marker-end="url(#arrow)"/>
+      </g>
+
+    </svg>
+  </div>
+
+  <footer class="foot">
+    <div>xorf · pipeline map · v1.0</div>
+    <div>hiller lab · comparative genomics</div>
+    <div>inter + jetbrains mono</div>
+  </footer>
+</div>
+</body>
+</html>

@@ -21,6 +21,9 @@ include { CONCAT }       from '../../modules/concat/main.nf'
 include { CONCAT as CONCAT_RAW }   from '../../modules/concat/main.nf'
 include { GENOMEMASK_SELENO } from '../../modules/genomemask/seleno/main.nf'
 include { GENEPRED_LINT } from '../../modules/genepred/lint/main.nf'
+include { DETACH_DUPLICATES } from '../../modules/detach/main.nf'
+include { ISOTOOLS_TRUNCATION_DETECTOR } from '../../modules/isotools/utr/main.nf'
+include { STRIP_OCCURRENCES as STRIP_TRUNCATIONS } from '../../modules/strip/main.nf'
 
 include { PREDICT_ORFS } from '../predict_orfs/main.nf'
 include { GET_CANDIDATES } from '../candidates/main.nf'
@@ -138,6 +141,21 @@ workflow XORF {
 
       CONCAT(
           ch_all
+      )
+
+      DETACH_DUPLICATES(
+            CONCAT.out.files.map { meta, bed, tsv -> tuple(meta, bed) }
+        )
+      ch_full_length_transcripts = DETACH_DUPLICATES.out.pass
+      ch_duplicates = DETACH_DUPLICATES.out.duplicates
+
+      ISOTOOLS_TRUNCATION_DETECTOR(
+          ch_full_length_transcripts
+      )
+      STRIP_TRUNCATIONS(
+          ch_full_length_transcripts,
+          ISOTOOLS_TRUNCATION_DETECTOR.out.descriptor,
+          "TRUNCATED"
       )
 
       PREDICT_ORFS.out.counts
