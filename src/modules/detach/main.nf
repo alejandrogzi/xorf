@@ -5,7 +5,7 @@ process DETACH_DUPLICATES {
     conda "${moduleDir}/environment.yml"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
         'https://depot.galaxyproject.org/singularity/grep:3.4--hf43ccf4_4':
-        'biocontainers/grep:3.4--hf43ccf4_4' }"
+        'quay.io/biocontainers/grep:3.4--hf43ccf4_4' }"
 
     input:
     tuple val(meta), path(bed)
