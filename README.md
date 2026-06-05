@@ -64,8 +64,7 @@ git clone https://github.com/hillerlab/xorf.git
 cd xorf
 ```
 
-Edit `params.json` (set `genome`, `assembly_prefix`), then:
-
+Edit `params.json` (set `regions`, `sequence`, `database`), then:
 ```bash
 # Docker
 nextflow run main.nf -params-file params.json -profile docker
