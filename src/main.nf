@@ -1,14 +1,72 @@
 #!/usr/bin/env nextflow
-nextflow.enable.dsl=2
 
-// Copyright (c) 2025 Alejandro Gonzales-Irribarren <alejandrxgzi@gmail.com>
-// Distributed under the terms of the Apache License, Version 2.0.
+/*
+Copyright (c) 2026 The Hiller Lab at the Senckenberg Gessellschaft für Naturforschung
+Distributed under the terms of the Apache License, Version 2.0.
+*/
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    PIPELINE — Orchestrates XORF analysis and sends email notifications
+    xorf
+
+    end-to-end robust and comprehensive ORF prediction pipeline
+    Authors: Alejandro Gonzales-Irribarren, Michael Hiller
+
+    GitHub:  https://github.com/hillerlab/xorf
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
+
+/*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    HELP
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*/
+
+if (params.help) {
+    log.info """
+    xorf v${workflow.manifest.version}
+    End-to-end robust and comprehensive ORF prediction pipeline
+
+    Authors: ${workflow.manifest.author}
+    Github:  ${workflow.manifest.homePage}
+
+    Usage (full run):
+        nextflow run main.nf \\
+            --regions        /path/to/regions.{bed, gtf, gff} \\
+            --sequence       /path/to/genome.{fa, 2bit, fa.gz} \\
+            --database       /path/to/{protein_database} \\
+            --outdir         results/ \\
+            -profile         apptainer,slurm
+
+    Pass all parameters from a JSON file (replaces old --params_from_file):
+        nextflow run main.nf -params-file my_params.json
+
+    Required parameters (full run + fill/clean):
+        --regions            PATH    Path to genomic regions (BED, GTF, or GFF)
+        --sequence           PATH    Path to genome sequence (FASTA or 2bit)
+        --database           PATH    Path to protein database (.dmnd)
+
+    Optional parameters (common):
+        --outdir              PATH    Output directory [default: ./results]
+        --chunk_size          INT     Chunk size for parallel processing [default: 20]
+        --predict_keep_raw    BOOL      Keep raw predictions [default: false]
+        --selenocysteine_sites PATH      Selenocysteine masking [default: null]
+        --predict_min_score_max_predictions FLOAT   Minimum score for ORF predictions [default: 0.50]
+        --predict_max_predictions INT  Maximum number of ORF predictions [default: 3]
+
+    Profiles:
+        local       Run on local machine (default)
+        slurm       Submit jobs to SLURM cluster
+        conda       Use conda environments
+        apptainer   Use Apptainer containers
+        singularity Use Singularity containers
+        docker      Use Docker containers
+        test        Run with bundled test data
+
+    Use --help to show this message.
+    """.stripIndent()
+    System.exit(0)
+}
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -17,8 +75,27 @@ nextflow.enable.dsl=2
 */
 
 include { EMAIL }        from './modules/email/main.nf'
-include { XORF }         from './subworkflows/xorf/main.nf'
+include { XORF as MAIN }         from './subworkflows/xorf/main.nf'
 include { WGET as WGET_SAMBA_WEIGHTS } from './modules/wget/main.nf'
+include { GUNZIP as GUNZIP_DATABASE } from './modules/gunzip/main.nf'
+
+/*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    VALIDATION
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*/
+
+def validateRun() {
+    def errors = []
+    if (!params.regions)   errors << "  --regions is required"
+    if (!params.sequence)  errors << "  --sequence is required"
+    if (!params.database)  errors << "  --database is required"
+
+    if (errors) {
+        log.error "Parameter validation failed:\n${errors.join('\n')}"
+        System.exit(1)
+    }
+}
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -71,6 +148,27 @@ workflow PIPELINE_COMPLETION {
 */
 
 workflow {
+    XORF()
+}
+
+workflow XORF {
+    
+    log.info """
+    > xorf v${workflow.manifest.version}
+    > End-to-end robust and comprehensive ORF prediction pipeline
+
+    Authors: ${workflow.manifest.author}
+    Github:  ${workflow.manifest.homePage}
+
+      Regions:   ${params.regions}
+      Sequence:  ${params.sequence}
+      Database:  ${params.database}
+      Outdir:    ${params.outdir}
+      Profile:   ${workflow.profile}
+    """.stripIndent()
+
+    validateRun()
+
     ch_samba_weights = Channel.empty()
     if (params.samba_local_weights) {
         ch_samba_weights = Channel.value(
@@ -85,10 +183,24 @@ workflow {
         ch_samba_weights = WGET_SAMBA_WEIGHTS.out.outfile
     }
 
-    XORF (
+    ch_database = Channel.empty()
+    if (params.database.endsWith('.gz')) {
+        GUNZIP_DATABASE(
+            Channel.value(
+                [ [id: params.database.tokenize('/')[-1]], params.database ]
+            )
+        )
+        GUNZIP_DATABASE.out.gunzip
+          .map { meta, it -> it }
+          .set { ch_database }
+    } else {
+        ch_database = Channel.fromPath(params.database)
+    }
+
+    MAIN (
        Channel.fromPath(params.regions).map { it -> [ [id: it.baseName, chr:'xorf'], it ] },
        Channel.fromPath(params.sequence),
-       Channel.fromPath(params.database),
+       ch_database,
        params.outdir,
        params.chunk_size,
        ch_samba_weights,
@@ -102,10 +214,36 @@ workflow {
         params.plaintext_email,
         params.outdir,
         params.use_mailx,
-        XORF.out.files,
-        XORF.out.counts,
-        XORF.out.versions
+        MAIN.out.files,
+        MAIN.out.counts,
+        MAIN.out.versions
     )
+}
+
+/*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    COMPLETION HANDLER
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*/
+
+workflow.onComplete {
+    if (workflow.success) {
+        def results_dir = new File(params.outdir as String, '02_results')
+        def final_beds = results_dir.exists() ? (results_dir.listFiles()?.findAll { it.name.endsWith('.bed') } ?: []) : []
+        log.info "Pipeline completed successfully!"
+        if (final_beds) {
+            log.info "Final predictions: ${final_beds.collect { it.toString() }.join(', ')}"
+        } else {
+            log.warn "Pipeline reported success but final bed file was not produced - check that all steps ran"
+        }
+        log.info "Run time   : ${workflow.duration}"
+    } else {
+        log.error "Pipeline FAILED — ${workflow.errorMessage}"
+    }
+}
+
+workflow.onError {
+    log.error "Pipeline error: ${workflow.errorMessage}"
 }
 
 /*

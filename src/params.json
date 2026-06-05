@@ -1,0 +1,18 @@
+{
+    "_comment": "Copy this file, fill in your genome paths, and pass it with: nextflow run main.nf -params-file my_params.json",
+    "//1": "── Input / Output ──────────────────────────────────────────────────────",
+    "regions": null,
+    "sequence": null,
+    "database": null,
+    "outdir": null,
+
+    "//2": "── Selenocysteine masking [optional] ──────────────────────────────────",
+    "selenocysteine_sites": null,
+
+    "//3": "── ORF prediction [optional] ───────────────────────────────────────────",
+    "chunk_size": 10,
+    "predict_keep_raw": false,
+    "predict_min_score_max_predictions": 0.50,
+    "predict_max_predictions": 3,
+    "predict_threshold": 0.03
+}
