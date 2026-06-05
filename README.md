@@ -60,8 +60,8 @@ features       └──────┘       └──────────�
 > Requirements: Nextflow ≥ 25.04.6, Docker or Apptainer, Java.
 
 ```bash
-git clone https://github.com/hillerlab/softmask.git
-cd softmask
+git clone https://github.com/hillerlab/xorf.git
+cd xorf
 ```
 
 Edit `params.json` (set `genome`, `assembly_prefix`), then:
