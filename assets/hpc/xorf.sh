@@ -87,7 +87,7 @@ cat > "${run_dir}/params.json" <<EOF
     "outdir": "${run_dir}/results",
 
     "//2": "── Selenocysteine masking [optional] ──────────────────────────────────",
-    "selenocysteine_sites": ${selenocysteine_sites},
+    "selenocysteine_sites": "${selenocysteine_sites}",
 
     "//3": "── ORF prediction [optional] ───────────────────────────────────────────",
     "chunk_size": 10,
