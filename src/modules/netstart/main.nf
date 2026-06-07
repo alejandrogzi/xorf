@@ -38,11 +38,11 @@ process NETSTART {
     -in $sequence \\
     -compute_device cpu \\
     -o chordata \\
-    -out ${meta.id}_netstart \\
+    -out ${meta.id}_${meta.name}_netstart.csv \\
     $args
 
-    if [ -f ${meta.id}_netstart.csv ]; then
-        PREDICTION_COUNT=\$(wc -l < ${meta.id}_netstart.csv)
+    if [ -f ${meta.id}_${meta.name}_netstart.csv ]; then
+        PREDICTION_COUNT=\$(wc -l < ${meta.id}_${meta.name}_netstart.csv)
     else
         PREDICTION_COUNT=0
     fi

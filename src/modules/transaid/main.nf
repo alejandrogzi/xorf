@@ -32,11 +32,11 @@ process TRANSAID {
     transaid \\
     --input $sequence \\
     --gpu -1 \\
-    --output ${meta.id}_transaid \\
+    --output ${meta.id}_${meta.name}_transaid \\
     $args
 
-    mv *csv ${meta.id}.${meta.name}.transaid.csv
-    PREDICTION_COUNT=\$(wc -l < ${meta.id}.${meta.name}.transaid.csv)
+    mv *csv ${meta.id}_${meta.name}_transaid.csv
+    PREDICTION_COUNT=\$(wc -l < ${meta.id}_${meta.name}_transaid.csv)
     
     rm *.faa
 

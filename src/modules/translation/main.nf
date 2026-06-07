@@ -18,7 +18,7 @@ process TRANSLATION {
     tuple val(meta), path(bed), path(sequence)
 
     output:
-    tuple val(meta), path(bed), path(sequence), path("${meta.id}/*result"), optional: true, emit: predictions
+    tuple val(meta), path(bed), path(sequence), path("${meta.id}_${meta.name}/*result"), optional: true, emit: predictions
     path "versions.yml", emit: versions
 
     when:
@@ -27,15 +27,16 @@ process TRANSLATION {
     script:
     def upstream = task.ext.upstream ?: 1000
     def downstream = task.ext.downstream ?: 1000
+    def prefix = task.ext.prefix ?: "${meta.id}_${meta.name}"
     """
     orf tai \\
     --fasta $sequence \\
     --bed $bed \\
-    --outdir ${meta.id} \\
+    --outdir ${prefix} \\
     -u $upstream \\
     -d $downstream
     
-    mv ${meta.id}/tai/*result ${meta.id}/ && rm -rf ${meta.id}/tai
+    mv ${prefix}/tai/*result ${prefix}/ && rm -rf ${prefix}/tai
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -46,9 +47,9 @@ process TRANSLATION {
 
     stub:
     """
-    touch ${meta.id}
-    touch ${meta.id}/tai
-    touch ${meta.id}/tai/*result
+    touch ${prefix}
+    touch ${prefix}/tai
+    touch ${prefix}/tai/*result
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

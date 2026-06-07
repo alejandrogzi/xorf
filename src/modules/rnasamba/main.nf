@@ -19,8 +19,8 @@ process RNASAMBA {
     tuple val(_), path(weights)
 
     output:
-    tuple val(meta), path("${meta.id}/*tsv")      , optional: true, emit: samba
-    tuple val(meta), path("${meta.id}/*strip.fa") , optional: true, emit: fasta
+    tuple val(meta), path("${meta.id}_${meta.name}/*tsv")      , optional: true, emit: samba
+    tuple val(meta), path("${meta.id}_${meta.name}/*strip.fa") , optional: true, emit: fasta
     tuple val(meta), path(bed)                    , optional: true, emit: bed
     path "versions.yml", emit: versions
 
@@ -31,17 +31,18 @@ process RNASAMBA {
     def args = task.ext.args ?: ''
     def upstream = task.ext.upstream ?: 1000
     def downstream = task.ext.downstream ?: 1000
+    def prefix = task.ext.prefix ?: "${meta.id}_${meta.name}"
     """
     orf samba \\
     --fasta $sequence \\
-    --outdir ${meta.id} \\
+    --outdir ${prefix} \\
     --upstream-flank $upstream \\
     --downstream-flank $downstream \\
     --weights $weights \\
     $args
 
-    mv ${meta.id}/samba/*tsv ${meta.id}/${meta.id}.${meta.name}.samba.tsv && rm -rf ${meta.id}/samba
-    mv ${meta.name}.tmp.strip.fa ${meta.id}/${meta.id}.${meta.name}.strip.fa 
+    mv ${prefix}/samba/*tsv ${prefix}/${prefix}.${meta.name}.samba.tsv && rm -rf ${prefix}/samba
+    mv ${meta.name}.tmp.strip.fa ${prefix}/${prefix}.${meta.name}.strip.fa 
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -52,10 +53,10 @@ process RNASAMBA {
 
     stub:
     """
-    touch ${meta.id}
-    touch ${meta.id}/*strip.fa
-    touch ${meta.id}/samba
-    touch ${meta.id}/samba/*
+    touch ${prefix}
+    touch ${prefix}/*strip.fa
+    touch ${prefix}/samba
+    touch ${prefix}/samba/*
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
