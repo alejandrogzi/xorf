@@ -95,7 +95,7 @@ sbatch --array=1-<N> xorf.sh
 
 Each array task spawns one Nextflow head job that submits all compute as child SLURM jobs.
 
-REPEATMASKER run as SLURM job arrays. Partition routing, array sizes, and resource tiers are documented inline in `nextflow.config` — edit there to match your cluster.
+PREDICT_ORFS run as SLURM job arrays. Partition routing, array sizes, and resource tiers are documented inline in `nextflow.config` — edit there to match your cluster.
 
 </details>
 
