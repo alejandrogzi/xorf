@@ -234,9 +234,9 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "genepred"
-version = "0.0.10"
+version = "0.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f159c120fafdabbd7ebbb601a2b785ffbbb40e370a30e7662a76a51832dd5f3d"
+checksum = "9cd51e7477eafba093bf369f6e2fdfd31c964967287988eae4d60364c15d0f53"
 dependencies = [
  "memchr",
  "memmap2",
@@ -370,7 +370,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "orf"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "clap",
  "dashmap",

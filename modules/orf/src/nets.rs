@@ -66,7 +66,7 @@ pub fn run_nets(args: NetArgs) {
 
 fn __join_nets(
     netstart: HashMap<String, Vec<NetRecord>>,
-    transaid: HashMap<String, Vec<NetRecord>>,
+    mut transaid: HashMap<String, Vec<NetRecord>>,
     bed: HashMap<String, GenePred>,
     outfile: &Path,
 ) {
@@ -85,6 +85,8 @@ fn __join_nets(
                 _ => panic!("ERROR: unexpected record type"),
             };
 
+            let mut found = false;
+
             let key = format!(
                 "{}#{}#{}",
                 id, prediction.orf_relative_start, prediction.orf_relative_stop
@@ -99,6 +101,7 @@ fn __join_nets(
             // INFO: getting NetTD record for the predicted ORF
             // INFO: format for output is: id start stop strand ns_start td_start td_stop strand
             if let Some(td_records) = transaid.get(&key) {
+                found = true;
                 for td_record in td_records {
                     let td_record = match td_record {
                         NetRecord::NetTD(record) => record,
@@ -149,8 +152,65 @@ fn __join_nets(
                     panic!("ERROR: failed to write record to file -> {e} -> {:?}", line);
                 });
             }
+
+            if found {
+                log::debug!("DEBUG: found match for {key:?} -> will remove from transaid");
+                transaid.remove(&key);
+            }
         }
     });
+
+    if !transaid.is_empty() {
+        log::warn!(
+            "WARNING: transaid has {} entries remaining that were not matched",
+            transaid.len()
+        );
+        for (key, records) in &transaid {
+            log::warn!("WARNING: no match found for {key:?}");
+
+            for record in records {
+                let record = match record {
+                    NetRecord::NetTD(record) => record,
+                    _ => panic!("ERROR: unexpected record type"),
+                };
+
+                let gp = bed.get(&record.sequence_id).unwrap_or_else(|| {
+                    panic!(
+                        "ERROR: could not find genepred record for id: {}",
+                        record.sequence_id
+                    );
+                });
+
+                let (orf_start, orf_end) = map_absolute_cds(
+                    gp,
+                    record.orf_relative_start as u64,
+                    record.orf_relative_stop as u64,
+                );
+
+                let line = format!(
+                    "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                    record.sequence_id,
+                    orf_start,
+                    orf_end,
+                    record.orf_relative_start,
+                    record.orf_relative_stop,
+                    gp.strand()
+                        .unwrap_or_else(|| panic!("ERROR: strand not found for {gp:?}!")),
+                    0.0,
+                    record.start_score,
+                    record.stop_score,
+                    record.integrated_score
+                );
+
+                writer.write_all(line.as_bytes()).unwrap_or_else(|e| {
+                    panic!("ERROR: failed to write record to file -> {e} -> {:?}", line);
+                });
+                writer.write_all(b"\n").unwrap_or_else(|e| {
+                    panic!("ERROR: failed to write record to file -> {e} -> {:?}", line);
+                });
+            }
+        }
+    }
 }
 
 /// Map netstart or transaid file to a hashmap
