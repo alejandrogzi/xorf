@@ -12,14 +12,14 @@
 //! heavily parallelized to offer fast performance on large datasets.
 
 use flate2::read::MultiGzDecoder;
-use genepred::{bed::BedFormat, Bed12, GenePred, Gff, Gtf, Reader, ReaderResult, Strand, Writer};
+use genepred::{Bed12, GenePred, Gff, Gtf, Reader, ReaderResult, Strand, Writer, bed::BedFormat};
 use rayon::prelude::*;
 use twobit::TwoBitFile;
 
 use std::{
     collections::HashMap,
     fmt::Debug,
-    fs::{create_dir_all, File},
+    fs::{File, create_dir_all},
     io::{BufRead, BufReader, BufWriter, Write},
     path::{Path, PathBuf},
     sync::Arc,
@@ -32,7 +32,7 @@ pub fn run_chunk(args: ChunkArgs) {
     let outdir = args.outdir.join("tmp");
     create_dir_all(&outdir).unwrap_or_else(|e| panic!("{}", e));
 
-    let prefix = Arc::new(args.prefix.unwrap_or_else(|| String::new()));
+    let prefix = Arc::new(args.prefix.unwrap_or_default());
 
     match detect_region_format(&args.regions) {
         Some(RegionFormat::Bed) => process_reader::<Bed12>(
@@ -94,6 +94,7 @@ pub fn run_chunk(args: ChunkArgs) {
 ///     ...
 /// );
 /// ```
+#[allow(clippy::too_many_arguments)]
 fn process_reader<R>(
     regions: &Path,
     chunks: usize,
@@ -147,6 +148,7 @@ fn process_reader<R>(
 ///     ...
 /// );
 /// ```
+#[allow(clippy::too_many_arguments)]
 fn write_chunk(
     idx: usize,
     chunk: Vec<ReaderResult<GenePred>>,
