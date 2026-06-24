@@ -40,7 +40,7 @@ process GENOMEMASK_SELENO {
         $args \\
         --sequence $genome \\
         --selenocysteine $selenocysteine \\
-        --output-format 2bit \\
+        --output-format fasta \\
         --nucleotide A
 
     cat <<-END_VERSIONS > versions.yml
