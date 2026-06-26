@@ -234,9 +234,9 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "genepred"
-version = "0.0.15"
+version = "0.0.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9cd51e7477eafba093bf369f6e2fdfd31c964967287988eae4d60364c15d0f53"
+checksum = "2d325e72bfd34cbe1676162128478838842807898aafb794fd3c822697d887f4"
 dependencies = [
  "memchr",
  "memmap2",
@@ -251,9 +251,9 @@ checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
 
 [[package]]
 name = "hashbrown"
-version = "0.16.1"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "841d1cc9bed7f9236f321df977030373f4a4163ae1a7dbfe1a51a2c1a51d9100"
+checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
  "allocator-api2",
  "equivalent",
@@ -370,13 +370,13 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "orf"
-version = "0.0.22"
+version = "0.0.23"
 dependencies = [
  "clap",
  "dashmap",
  "flate2",
  "genepred",
- "hashbrown 0.16.1",
+ "hashbrown 0.17.1",
  "log",
  "memchr",
  "memmap2",

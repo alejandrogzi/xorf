@@ -1,17 +1,17 @@
 [package]
 name = "orf"
-version = "0.0.22"
+version = "0.0.23"
 edition = "2024"
 
 [dependencies]
 dashmap = { version = "6", features = ["rayon"] }
 smol_str = "0.3"
-hashbrown = { version = "0.16", features = ["rayon"] }
+hashbrown = { version = "0.17", features = ["rayon"] }
 memmap2 = "0.9.5"
 memchr = "2.7.4"
 clap = { version = "4.0", features = ["derive"] }
 rayon = "1.11.0"
-genepred = { version = "0.0.15", features = ["mmap", "rayon"] }
+genepred = { version = "0.0.16", features = ["mmap", "rayon"] }
 twobit = "0.2.1"
 num_cpus = "1.17.0"
 simple_logger = "5.0.0"
