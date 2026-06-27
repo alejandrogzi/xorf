@@ -437,7 +437,21 @@ pub fn get_bed(bed: &PathBuf) -> HashMap<String, GenePred> {
 ///
 /// This function does not panic under normal conditions.
 ///
+#[derive(Debug, Clone, Copy)]
+enum TranscriptPosition {
+    Start,
+    End,
+}
+
 fn get_pos_in_exons(record: &GenePred, pos: u64) -> Option<u64> {
+    get_pos_in_exons_by_kind(record, pos, TranscriptPosition::Start)
+}
+
+fn get_end_pos_in_exons(record: &GenePred, pos: u64) -> Option<u64> {
+    get_pos_in_exons_by_kind(record, pos, TranscriptPosition::End)
+}
+
+fn get_pos_in_exons_by_kind(record: &GenePred, pos: u64, kind: TranscriptPosition) -> Option<u64> {
     let mut current_pos = 0;
     let mut exons = record.exons();
 
@@ -461,9 +475,14 @@ fn get_pos_in_exons(record: &GenePred, pos: u64) -> Option<u64> {
 
     for (exon_start, exon_end) in exons.iter() {
         let block_len = exon_end - exon_start; // INFO: exon length
+        let exon_transcript_end = current_pos + block_len;
 
-        if pos <= current_pos + block_len {
-            // INFO: position falls inside this exon
+        let is_in_exon = match kind {
+            TranscriptPosition::Start => pos < exon_transcript_end,
+            TranscriptPosition::End => pos <= exon_transcript_end,
+        };
+
+        if is_in_exon {
             let offset = pos - current_pos;
             return Some(exon_start + offset);
         }
@@ -512,7 +531,7 @@ pub fn get_cds_from_pos(record: &GenePred, orf_start: u64, orf_end: u64) -> (u64
         panic!("ERROR: could not map ORF_START to exonic coordinates: {orf_start} -> {record:?}")
     });
 
-    let cds_end = get_pos_in_exons(record, orf_end).unwrap_or_else(|| {
+    let cds_end = get_end_pos_in_exons(record, orf_end).unwrap_or_else(|| {
         panic!("ERROR: could not map ORF_END to exonic coordinates: {orf_end} -> {record:?}")
     });
 
@@ -873,5 +892,105 @@ mod tests {
 
         assert_eq!(predicted_cds_start, 83116811);
         assert_eq!(predicted_cds_end, 83118717);
+    }
+
+    #[test]
+    fn test_get_pos_in_exons_forward_translationai_prediction_wrong_start_cow() {
+        let data = "NC_037328	102267973	102388511	XM_005201715.5	0	+	102272281	102388043	0,0,0	48	96,118,95,118,110,152,172,100,113,126,132,120,114,85,118,172,117,155,85,57,125,89,50,171,156,204,155,169,97,113,126,129,111,63,117,88,139,134,35,117,149,85,57,125,89,50,168,537	0,4308,5644,7568,7981,9021,10662,12452,13630,15870,18181,18399,20348,29163,32745,34854,38566,40588,41701,42678,43435,45403,48668,50006,58153,68412,70214,71796,73546,73750,73952,75545,77369,79915,81921,83444,84463,89302,90352,90474,93758,96861,97028,97687,100948,116510,117018,120001";
+
+        let mut reader: Reader<Bed12> =
+            Reader::from_reader(std::io::Cursor::new(data.as_bytes())).unwrap();
+        let record = reader.next().unwrap().unwrap();
+
+        let orf_start = 96;
+        let orf_end = 5535;
+
+        let (predicted_cds_start, predicted_cds_end) =
+            get_cds_from_pos(&record, orf_start, orf_end);
+
+        dbg!(predicted_cds_start, predicted_cds_end);
+
+        assert_eq!(predicted_cds_start, 102272281);
+        assert_eq!(predicted_cds_end, 102388043);
+    }
+
+    #[test]
+    fn test_get_pos_in_exons_forward_translationai_prediction_wrong_start_cow_additional() {
+        let data = "NC_037328	127530720	127609658	XM_059888940	0	-	127533976	127537591	0,0,0	7	6871,105,11028,446,66,75,309	0,44010,46138,58325,59275,77446,78629";
+
+        let mut reader: Reader<Bed12> =
+            Reader::from_reader(std::io::Cursor::new(data.as_bytes())).unwrap();
+        let record = reader.next().unwrap().unwrap();
+
+        let orf_start = 12029;
+        let orf_end = 15644;
+
+        let (predicted_cds_start, predicted_cds_end) =
+            get_cds_from_pos(&record, orf_start, orf_end);
+
+        dbg!(predicted_cds_start, predicted_cds_end);
+
+        assert_eq!(predicted_cds_start, 127533976);
+        assert_eq!(predicted_cds_end, 127537591);
+    }
+
+    #[test]
+    fn test_get_pos_in_exons_forward_translationai_prediction_wrong_start_cow_additional_2() {
+        let data = "NC_037328	69329582	69357506	XM_002684796.7	0	-	69332533	69357372	0,0,0	12	923,196,85,38,121,126,164,56,107,120,1074,186	0,2951,5733,7446,8130,8564,11264,14986,18831,20186,24458,27738";
+
+        let mut reader: Reader<Bed12> =
+            Reader::from_reader(std::io::Cursor::new(data.as_bytes())).unwrap();
+        let record = reader.next().unwrap().unwrap();
+
+        let orf_start = 134;
+        let orf_end = 2273;
+
+        let (predicted_cds_start, predicted_cds_end) =
+            get_cds_from_pos(&record, orf_start, orf_end);
+
+        dbg!(predicted_cds_start, predicted_cds_end);
+
+        assert_eq!(predicted_cds_start, 69332533);
+        assert_eq!(predicted_cds_end, 69357372);
+    }
+
+    #[test]
+    fn test_get_pos_in_exons_forward_translationai_prediction_wrong_start_cow_additional_3() {
+        let data = "NC_037357	35186707	35245555	XM_024988460.2	0	+	35201872	35242092	0,0,0	22	158,79,66,42,78,90,87,84,42,87,105,99,96,90,195,195,111,81,72,103,99,2534	0,12066,12624,14433,14577,15164,16087,16869,17192,23711,26945,28746,31210,32094,38359,43644,46231,47344,49432,50523,55286,56314";
+
+        let mut reader: Reader<Bed12> =
+            Reader::from_reader(std::io::Cursor::new(data.as_bytes())).unwrap();
+        let record = reader.next().unwrap().unwrap();
+
+        let orf_start = 424;
+        let orf_end = 2059;
+
+        let (predicted_cds_start, predicted_cds_end) =
+            get_cds_from_pos(&record, orf_start, orf_end);
+
+        dbg!(predicted_cds_start, predicted_cds_end);
+
+        assert_eq!(predicted_cds_start, 35201872);
+        assert_eq!(predicted_cds_end, 35242092);
+    }
+
+    #[test]
+    fn test_get_pos_in_exons_forward_translationai_prediction_wrong_start_cow_additional_4() {
+        let data = "NC_037335	111666383	112087409	XM_024995855.2	0	+	111926245	112085362	0,0,0	25	240,88,106,143,154,55,34,63,350,975,135,91,108,212,251,234,122,69,63,84,222,92,104,144,2074	0,38344,141165,225665,255268,259862,260086,260311,282916,297251,303053,307317,308931,312650,319990,322543,324983,325986,385391,391222,392566,403274,413083,417769,418952";
+
+        let mut reader: Reader<Bed12> =
+            Reader::from_reader(std::io::Cursor::new(data.as_bytes())).unwrap();
+        let record = reader.next().unwrap().unwrap();
+
+        let orf_start = 731;
+        let orf_end = 4166;
+
+        let (predicted_cds_start, predicted_cds_end) =
+            get_cds_from_pos(&record, orf_start, orf_end);
+
+        dbg!(predicted_cds_start, predicted_cds_end);
+
+        assert_eq!(predicted_cds_start, 111926245);
+        assert_eq!(predicted_cds_end, 112085362);
     }
 }
