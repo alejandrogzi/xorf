@@ -116,8 +116,6 @@ workflow XORF {
           )
           .set { ch_pairs }
 
-      ch_pairs.view()
-
       GET_CANDIDATES(
           ch_pairs,
           ch_database,
