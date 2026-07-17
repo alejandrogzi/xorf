@@ -17,6 +17,7 @@ nextflow.enable.dsl=2
 */
 
 include { CHUNKER }      from '../../modules/chunker/main.nf'
+include { CHUNKER as UNMASKED_CHUNKER } from '../../modules/chunker/main.nf'
 include { CONCAT }       from '../../modules/concat/main.nf'
 include { CONCAT as CONCAT_RAW }   from '../../modules/concat/main.nf'
 include { GENOMEMASK_SELENO } from '../../modules/genomemask/seleno/main.nf'
@@ -24,6 +25,7 @@ include { GENEPRED_LINT } from '../../modules/genepred/lint/main.nf'
 include { DETACH_DUPLICATES } from '../../modules/detach/main.nf'
 include { ISOTOOLS_TRUNCATION_DETECTOR } from '../../modules/isotools/utr/main.nf'
 include { STRIP_OCCURRENCES as STRIP_TRUNCATIONS } from '../../modules/strip/main.nf'
+include { BEDTOOLS_INTERSECT as BEDTOOLS_INTERSECT_UNMASKED } from '../../modules/bedtools/intersect/main.nf'
 
 include { PREDICT_ORFS } from '../predict_orfs/main.nf'
 include { GET_CANDIDATES } from '../candidates/main.nf'
@@ -57,20 +59,37 @@ workflow XORF {
         ch_regions
       )
 
+      ch_unmasked_chunked_regions = Channel.empty()
+      ch_unmasked_chunked_sequences = Channel.empty()
       if (selenocysteine_sites) {
+          ch_selenocysteine_sites = Channel.fromPath(selenocysteine_sites, checkIfExists: true).map { it -> [ [id: it.baseName], it ] }
+
           GENOMEMASK_SELENO(
               ch_sequence.map { it -> [ [id: it.baseName], it ] },
-              Channel.fromPath(selenocysteine_sites, checkIfExists: true)
-              .map { it -> [ [id: it.baseName], it ] }
+              ch_selenocysteine_sites
           )
 
           CHUNKER(
-              ch_regions,
+              ch_regions.map { meta, file -> [ meta + [masked: true], file ] },
               GENOMEMASK_SELENO.out.fasta.first(),
               chunkSize,
           )
 
+          BEDTOOLS_INTERSECT_UNMASKED(
+              ch_regions,
+              ch_selenocysteine_sites
+          )
+          UNMASKED_CHUNKER(
+              BEDTOOLS_INTERSECT_UNMASKED.out.bed
+                .map { meta, file -> [ meta + [chr:'unmasked', masked: false], file ] },
+              ch_sequence.map { it -> [ [ id: it.baseName ], it ] },
+              chunkSize,
+          )
+          ch_unmasked_chunked_regions = UNMASKED_CHUNKER.out.chunked_regions
+          ch_unmasked_chunked_sequences = UNMASKED_CHUNKER.out.chunked_sequences
+
           ch_versions = ch_versions.mix(GENOMEMASK_SELENO.out.versions)
+          ch_versions = ch_versions.mix(BEDTOOLS_INTERSECT_UNMASKED.out.versions)
       } else {
           CHUNKER(
               ch_regions,
@@ -80,6 +99,7 @@ workflow XORF {
       }
 
       CHUNKER.out.chunked_regions
+          .mix(ch_unmasked_chunked_regions)
           .flatMap { meta, region -> 
               def regions = region instanceof List ? region : [region]
               regions.collect { it ->
@@ -87,6 +107,7 @@ workflow XORF {
               }
           .join(
               CHUNKER.out.chunked_sequences
+                .mix(ch_unmasked_chunked_sequences)
                 .flatMap { meta, fasta -> 
                     def fas = fasta instanceof List ? fasta : [fasta]
                     fas.collect { it ->
@@ -94,6 +115,8 @@ workflow XORF {
                 }
           )
           .set { ch_pairs }
+
+      ch_pairs.view()
 
       GET_CANDIDATES(
           ch_pairs,
