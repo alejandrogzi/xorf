@@ -3,8 +3,10 @@
     "//1": "── Input / Output ──────────────────────────────────────────────────────",
     "regions": null,
     "sequence": null,
-    "database": null,
     "outdir": null,
+
+    "//1.1": "── Protein database [optional; default downloads UniProt/SwissProt] ────",
+    "custom_database": null,
 
     "//2": "── Selenocysteine masking [optional] ──────────────────────────────────",
     "selenocysteine_sites": null,

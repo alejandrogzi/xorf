@@ -34,7 +34,6 @@ if (params.help) {
         nextflow run main.nf \\
             --regions        /path/to/regions.{bed, gtf, gff} \\
             --sequence       /path/to/genome.{fa, 2bit, fa.gz} \\
-            --database       /path/to/{protein_database} \\
             --outdir         results/ \\
             -profile         apptainer,slurm
 
@@ -44,10 +43,10 @@ if (params.help) {
     Required parameters (full run + fill/clean):
         --regions            PATH    Path to genomic regions (BED, GTF, or GFF)
         --sequence           PATH    Path to genome sequence (FASTA or 2bit)
-        --database           PATH    Path to protein database (.dmnd)
 
     Optional parameters (common):
         --outdir              PATH    Output directory [default: ./results]
+        --custom_database     PATH    Path to custom protein database (.dmnd) [default: null]
         --chunk_size          INT     Chunk size for parallel processing [default: 20]
         --predict_keep_raw    BOOL      Keep raw predictions [default: false]
         --selenocysteine_sites PATH      Selenocysteine masking [default: null]
@@ -77,6 +76,8 @@ if (params.help) {
 include { EMAIL }        from './modules/email/main.nf'
 include { XORF as MAIN }         from './subworkflows/xorf/main.nf'
 include { WGET as WGET_SAMBA_WEIGHTS } from './modules/wget/main.nf'
+include { UNTAR } from './modules/untar/main.nf'
+include { WGET as WGET_PROTEIN_DATABASE } from './modules/wget/main.nf'
 include { GUNZIP as GUNZIP_DATABASE } from './modules/gunzip/main.nf'
 
 /*
@@ -89,7 +90,6 @@ def validateRun() {
     def errors = []
     if (!params.regions)   errors << "  --regions is required"
     if (!params.sequence)  errors << "  --sequence is required"
-    if (!params.database)  errors << "  --database is required"
 
     if (errors) {
         log.error "Parameter validation failed:\n${errors.join('\n')}"
@@ -162,7 +162,7 @@ workflow XORF {
 
       Regions:   ${params.regions}
       Sequence:  ${params.sequence}
-      Database:  ${params.database}
+      Database:  ${params.database} (custom: ${params.custom_database})
       Outdir:    ${params.outdir}
       Profile:   ${workflow.profile}
     """.stripIndent()
@@ -184,17 +184,26 @@ workflow XORF {
     }
 
     ch_database = Channel.empty()
-    if (params.database.endsWith('.gz')) {
-        GUNZIP_DATABASE(
-            Channel.value(
-                [ [id: params.database.tokenize('/')[-1]], params.database ]
-            )
-        )
-        GUNZIP_DATABASE.out.gunzip
-          .map { meta, it -> it }
-          .set { ch_database }
+    if (params.custom_database) {
+      if (params.custom_database.endsWith('.gz')) {
+          GUNZIP_DATABASE(
+              Channel.value(
+                  [ [id: params.database.tokenize('/')[-1]], params.database ]
+              )
+          )
+          GUNZIP_DATABASE.out.gunzip
+            .map { meta, it -> it }
+            .set { ch_database }
+      } else {
+          ch_database = Channel.fromPath(params.database)
+      }
     } else {
-        ch_database = Channel.fromPath(params.database)
+      WGET_PROTEIN_DATABASE(
+        Channel.value(params.database)
+        .map { it -> [ [ id: 'uniprot_sprot.tar.gz' ], it ] }
+      )
+      UNTAR(WGET_PROTEIN_DATABASE.out.outfile)
+      ch_database = UNTAR.out.contents.map { meta, it -> it }
     }
 
     MAIN (
