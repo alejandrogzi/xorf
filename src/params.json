@@ -9,7 +9,7 @@
     "custom_database": null,
 
     "//1.2": "── Netstart [optional] ───────────────────────────────────────────",
-    "skip_netstart": false,
+    "skip_netstart": true,
 
     "//2": "── Selenocysteine masking [optional] ──────────────────────────────────",
     "selenocysteine_sites": null,

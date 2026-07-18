@@ -79,6 +79,8 @@ workflow GET_CANDIDATES {
       .join(JOIN_NETS.out.net)
       .set { ch_pre_candidates }
 
+      // INFO: BLAST.out.blast is a channel of [meta, bed, tsv]
+      // INFO: RNASAMBA.out.samba is a channel of [meta, tsv]
       BLAST(
           ch_pre_candidates,
           ch_database
@@ -88,7 +90,6 @@ workflow GET_CANDIDATES {
       .set { ch_candidates }
 
       BLAST.out.counts
-      .join(NETSTART.out.count)
       .join(TRANSAID.out.count)
       .join(JOIN_NETS.out.count)
       .set { ch_counts }
