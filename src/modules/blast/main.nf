@@ -19,7 +19,7 @@ process BLAST {
     each path(database)
 
     output:
-    tuple val(meta), path(bed), path("${meta.id}_${meta.name}/*result"), optional: true, emit: blast
+    tuple val(meta), path(bed), path("*/*result"), optional: true, emit: blast
     tuple val(meta), env(INITIAL_REGION_COUNT), env(TRANSLATION_COUNT), optional: true, emit: counts
     path "versions.yml", emit: versions
 
@@ -32,16 +32,17 @@ process BLAST {
     def orf_min_percent = task.ext.orf_min_percent ?: 0.25
     def upstream = task.ext.upstream ?: 1000
     def downstream = task.ext.downstream ?: 1000
-    def prefix = task.ext.prefix ?: "${meta.id}_${meta.name}"
     def keep_temp = task.ext.keep_temp ? "--keep-temp" : ""
+
+    def prefix = task.ext.prefix ?: "${meta.id}_${meta.name}"
+    prefix = prefix.replaceAll('\\.', '_')
     """
-    set +e
     orf blast \\
     --fasta $sequence \\
     --bed $bed \\
     --tai $predictions \\
     --net $net \\
-    --outdir ${prefix} \\
+    --outdir . \\
     --orf-min-len $orf_min_len \\
     --orf-min-percent $orf_min_percent \\
     --database $database \\
@@ -61,6 +62,7 @@ process BLAST {
 
     stub:
     def prefix = task.ext.prefix ?: "${meta.id}_${meta.name}"
+    prefix = prefix.replaceAll('\\.', '_')
     """
     touch ${prefix}.orf
     touch ${prefix}.orf/*

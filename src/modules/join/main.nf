@@ -28,13 +28,13 @@ process JOIN {
 
     script:
     def args = task.ext.args ?: ''
-    def nt = ${netstart} ? '--netstart $netstart' : ''
+    def include_netstart = params.skip_netstart ? "" : "--netstart $netstart"
     """
     orf net \\
     $args \\
     --bed $bed \\
     --transaid $transaid \\
-    $nt \\
+    $include_netstart \\
     --outdir .
 
     PREDICTION_COUNT=\$(cat net/merged.net | wc -l)
