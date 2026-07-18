@@ -41,11 +41,12 @@ workflow XORF {
       regions        // [ [id:id, chr:chr] , file ]
       sequence       // [ file ]
       database       // [ file ]
-      output_dir
-      chunk_size
+      output_dir     // path
+      chunk_size     // int
       samba_weights  // channel: [ meta, path ]
-      predict_keep_raw
-      selenocysteine_sites
+      predict_keep_raw     // boolean
+      selenocysteine_sites // path
+      skip_netstart        // boolean
 
     main:
       def ch_regions  = regions
@@ -119,7 +120,8 @@ workflow XORF {
       GET_CANDIDATES(
           ch_pairs,
           ch_database,
-          samba_weights
+          samba_weights,
+          skip_netstart
       )
 
       PREDICT_ORFS(
