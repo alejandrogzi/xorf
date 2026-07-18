@@ -33,19 +33,19 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Commands {
-    /// Run ORF detection using orfipy + diamond
+    /// Run ORF detection using orfipy + diamond + psauron
     Blast(BlastArgs),
 
     /// Run ORF detection using TranslationAi
     Tai(TaiArgs),
 
-    /// Read and merge TOGA results
+    /// Chunk genomic regions and sequences
     Chunk(ChunkArgs),
 
     /// Run RNAsamba on a set of reads
     Samba(SambaArgs),
 
-    /// Join nets (NetStart2 + Transaid)
+    /// Join nets (NetStart2 [optional] + Transaid)
     Net(NetArgs),
 }
 
@@ -171,6 +171,23 @@ pub struct BlastArgs {
         default_value_t = BIG_EXON_DIST_TO_EJ,
     )]
     pub big_exon_dist_to_ej: u64,
+
+    #[arg(
+        short = 'P',
+        long = "prefix",
+        required = false,
+        help = "Prefix for output files",
+        default_value = "xorf"
+    )]
+    pub prefix: String,
+
+    #[arg(
+        short = 'K',
+        long = "keep-temp",
+        help = "Keep temporary files",
+        action = clap::ArgAction::SetTrue
+    )]
+    pub keep_temp: bool,
 }
 
 #[derive(Debug, Parser)]
@@ -348,10 +365,10 @@ pub struct NetArgs {
     #[arg(
         short = 'n',
         long = "netstart",
-        required = true,
+        required = false,
         help = "Path to netstart .csv file"
     )]
-    pub netstart: PathBuf,
+    pub netstart: Option<PathBuf>,
 
     #[arg(
         short = 't',

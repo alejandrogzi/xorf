@@ -43,7 +43,7 @@ use crate::{cli::BlastArgs, consts::*, utils::*};
 /// run_blast(args);
 /// ```
 pub fn run_blast(args: BlastArgs) {
-    let dir = args.outdir.join("orf");
+    let dir = args.outdir.join(format!("{}.orf", args.prefix));
     std::fs::create_dir_all(&dir)
         .unwrap_or_else(|e| panic!("ERROR: could not create directory -> {e}!"));
 
@@ -78,9 +78,31 @@ pub fn run_blast(args: BlastArgs) {
         args.weak_nmd_distance,
         args.atg_distance,
         args.big_exon_dist_to_ej,
+        args.prefix.clone(),
     );
 
-    __run_diamond(table, args.database, &dir);
+    __run_diamond_and_psauron(table, args.database, &dir, args.prefix);
+
+    if !args.keep_temp {
+        println!("INFO: removing temporary files in {dir:?}");
+        // INFO: remove everything under outdir that does not end with '.result'
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.is_file()
+                && !path
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .ends_with(".result")
+            {
+                std::fs::remove_file(path).unwrap();
+            }
+        }
+    } else {
+        println!("INFO: keeping temporary files in {dir:?}");
+    }
 }
 
 /// Cuts the input fasta file by the given flanks
@@ -180,12 +202,18 @@ fn cut_fasta(
 /// let table = get_table(orfs, bed, &dir, args.tai);
 /// __run_diamond(table, DATABASE, &dir);
 /// ```
-fn __run_diamond(mut table: HashMap<usize, Vec<String>>, database: PathBuf, outdir: &Path) {
-    let diamond = outdir.join("orf.diamond");
-    let orfs = outdir.join("orf.dedup.pep");
+fn __run_diamond_and_psauron(
+    mut table: HashMap<usize, Vec<String>>,
+    database: PathBuf,
+    outdir: &Path,
+    prefix: String,
+) {
+    let diamond = outdir.join(format!("{}.orf.diamond", prefix));
+    let orfs = outdir.join(format!("{}.orf.dedup.pep", prefix));
+    let psauron = outdir.join(format!("{}.orf.psauron", prefix));
 
     let cmd = format!(
-        "diamond blastp --query {} --db {} --out {} --outfmt 6 qseqid pident qlen slen length qstart qend sstart send evalue --threads 8 --sensitive -e 1e-10",
+        "diamond blastp --query {} --db {} --out {} --outfmt 6 qseqid pident qlen slen length qstart qend sstart send evalue sseqid --threads 8 --sensitive -e 1e-10",
         orfs.display(),
         database.display(),
         diamond.display()
@@ -198,9 +226,25 @@ fn __run_diamond(mut table: HashMap<usize, Vec<String>>, database: PathBuf, outd
         .status()
         .unwrap_or_else(|e| panic!("ERROR: failed to execute diamond command -> {e}"));
 
+    let cmd = format!("psauron -i {} -o {} -p", orfs.display(), psauron.display());
+    println!("INFO: Executing -> {}", cmd);
+
+    std::process::Command::new("bash")
+        .arg("-c")
+        .arg(cmd)
+        .status()
+        .unwrap_or_else(|e| panic!("ERROR: failed to execute diamond command -> {e}"));
+
     let mut seen = HashSet::new();
-    let predictions = reader(&diamond)
-        .unwrap_or_else(|e| panic!("ERROR: failed to read blast predictions file -> {e}"));
+
+    // WARN: breaking point -> if BLAST is empty we throw an error; very plausible to happen
+    // WARN: we now avoid panicking and instead return an empty table
+    let predictions = reader(&diamond).unwrap_or_default();
+    if predictions.is_empty() {
+        println!("WARN: no predictions found for {diamond:?}. Will proceed with empty BLAST table");
+    }
+
+    let psauron_predictions = read_psauron(psauron);
 
     let mut writer = BufWriter::new(File::create(diamond.with_extension(RESULT)).unwrap_or_else(
         |e| {
@@ -225,17 +269,22 @@ fn __run_diamond(mut table: HashMap<usize, Vec<String>>, database: PathBuf, outd
         let lines = table.get(&u_header).unwrap_or_else(|| {
             panic!("ERROR: could not find header {header} in table -> {parts:?}!")
         });
+        let psauron_score = psauron_predictions.get(&u_header).unwrap_or_else(|| {
+            panic!("ERROR: could not find header {header} in psauron predictions -> {parts:?}")
+        });
 
         for line in lines {
             let blast = BlastRecord::from_parts(&parts);
             let output = format!(
-                "{}\t{:.2}\t{:e}\t{}\t{}\t{}\n",
+                "{}\t{:.2}\t{:e}\t{}\t{}\t{}\t{}\t{}\n",
                 line,
                 blast.blast_pid,
                 blast.blast_e_value,
                 blast.blast_offset,
                 blast.blast_alignment_len,
-                blast.percent_aligned
+                blast.percent_aligned,
+                psauron_score,
+                blast.reference_id
             );
 
             writer.write_all(output.as_bytes()).unwrap_or_else(|e| {
@@ -247,13 +296,120 @@ fn __run_diamond(mut table: HashMap<usize, Vec<String>>, database: PathBuf, outd
         table.remove(&u_header);
     }
 
-    for (_, lines) in table.iter() {
-        for line in lines {
-            let output = format!("{}\t0\t1\t0\t0\t0\n", line);
+    for (u_header, lines) in table.iter() {
+        if let Some(psauron_score) = psauron_predictions.get(u_header) {
+            for line in lines {
+                let output = format!("{}\t0\t1\t0\t0\t0\t{}\tUNKNOWN\n", line, psauron_score);
 
-            writer.write_all(output.as_bytes()).unwrap_or_else(|e| {
-                panic!("ERROR: failed to write to file -> {e}");
+                writer.write_all(output.as_bytes()).unwrap_or_else(|e| {
+                    panic!("ERROR: failed to write to file -> {e}");
+                });
+            }
+        } else {
+            for line in lines {
+                let output = format!("{}\t0\t1\t0\t0\t0\t0.0\tUNKNOWN\n", line);
+
+                writer.write_all(output.as_bytes()).unwrap_or_else(|e| {
+                    panic!("ERROR: failed to write to file -> {e}");
+                });
+            }
+        }
+    }
+}
+
+/// Reads the psauron output and converts it to a hashmap of `PsauronRecord`s
+///
+/// # Arguments
+///
+/// * `psauron` - The path to the psauron output
+///
+/// # Returns
+///
+/// A `HashMap` of `String` and their corresponding `PsauronRecord`
+///
+/// # Example
+///
+/// ```rust
+/// let psauron = read_psauron(psauron).unwrap();
+/// ```
+pub fn read_psauron<P: AsRef<Path> + std::fmt::Debug>(psauron: P) -> HashMap<usize, f32> {
+    let predictions = reader(psauron)
+        .unwrap_or_else(|e| panic!("ERROR: failed to read blast predictions file -> {e}"));
+
+    let mut accumulator = HashMap::new();
+
+    // INFO: format below
+    // /psauron/bin/psauron -i orf.dedup.pep -o test.csv -p
+    // psauron score: 70.6
+    // description,psauron_is_protein,in-frame_score
+    // 64,True,0.99869
+    // 19,True,0.99216
+    for line in predictions.lines().skip(3) {
+        let record = PsauronRecord::parse(line);
+        accumulator.insert(record.u_id, record.psauron_score);
+    }
+
+    accumulator
+}
+
+/// A struct representing a psauron record
+#[derive(Debug, Clone)]
+pub struct PsauronRecord {
+    pub u_id: usize,
+    pub psauron_score: f32,
+}
+
+impl PsauronRecord {
+    /// Parses a psauron record from a string
+    ///
+    /// # Arguments
+    ///
+    /// * `line` - The string to parse
+    ///
+    /// # Returns
+    ///
+    /// A `PsauronRecord` struct
+    ///
+    /// # Panics
+    /// This function will panic if the line is not in the correct format
+    ///
+    /// # Example
+    ///
+    /// ```rust
+    /// let line = "64,True,0.99869";
+    /// let record = PsauronRecord::parse(line);
+    /// ```
+    pub fn parse(line: &str) -> Self {
+        let mut parts = line.split(',');
+
+        let u_id = parts
+            .next()
+            .unwrap_or_else(|| {
+                panic!("ERROR: failed to parse u_id from line: {}", line);
+            })
+            .parse::<usize>()
+            .unwrap_or_else(|_| {
+                panic!("ERROR: failed to parse header as usize in parts: {parts:?}")
             });
+
+        parts.next();
+
+        let psauron_score = parts
+            .next()
+            .unwrap_or_else(|| {
+                panic!("ERROR: failed to parse psauron_score from line: {}", line);
+            })
+            .parse::<f32>()
+            .unwrap_or_else(|e| {
+                panic!(
+                    "ERROR: failed to parse psauron_score from line: {} -> {e}",
+                    line
+                );
+            });
+
+        Self {
+            u_id,
+            psauron_score,
         }
     }
 }
@@ -266,6 +422,7 @@ pub struct BlastRecord {
     pub blast_offset: i32,        // Offset in the query sequence where the match starts
     pub blast_alignment_len: u32, // Length of the alignment
     pub percent_aligned: f32,     // Percentage of the query sequence that is aligned
+    pub reference_id: String,     // Reference ID of the match
 }
 
 impl BlastRecord {
@@ -296,8 +453,8 @@ impl BlastRecord {
     ///
     /// Follows this format:
     ///
-    /// qseqid pident  qlen    slen   length qstart    qend   sstart   send     evalue
-    ///  17      97.2    142     357     141     1       141     217     357     5.09e-93
+    /// qseqid pident  qlen    slen   length qstart    qend   sstart   send     evalue     sseqid
+    ///  17      97.2    142     357     141     1       141     217     357     5.09e-93  sp|O55165|KIF3C_RAT
     ///
     /// ```rust
     /// let parts = ["1", "99.0", "500", "0", "100", "1", "100", "1", "100", "1e-10"];
@@ -362,12 +519,21 @@ impl BlastRecord {
             }) as f32
             * 100.0;
 
+        let reference_id = parts[10]
+            .split("|")
+            .last()
+            .unwrap_or_else(|| {
+                panic!("ERROR: failed to parse reference id from blast line: {parts:?}",);
+            })
+            .to_string();
+
         Self {
             blast_pid,
             blast_e_value,
             blast_offset,
             blast_alignment_len,
             percent_aligned,
+            reference_id,
         }
     }
 }
@@ -992,6 +1158,7 @@ pub fn get_table(
     weak_nmd_distance: i64,
     atg_distance: u64,
     big_exon_dist_to_ej: u64,
+    prefix: String,
 ) -> HashMap<usize, Vec<String>> {
     // INFO: sequence index -> vec of constructed lines
     let mut table = HashMap::new();
@@ -1014,8 +1181,8 @@ pub fn get_table(
         HashMap::new()
     };
 
-    let filename = &outdir.join("orf");
-    let mut pep = create_file(filename, "dedup.pep")
+    let filename = &outdir.join(prefix);
+    let mut pep = create_file(filename, "orf.dedup.pep")
         .unwrap_or_else(|| panic!("ERROR: could not create file {:?}", filename));
 
     let mut unique_tai_idx = 0;

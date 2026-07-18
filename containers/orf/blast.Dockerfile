@@ -44,7 +44,8 @@ ENV PATH=/opt/conda/bin:$PATH
 RUN micromamba create -y -n blastenv -c conda-forge -c bioconda \
     python=3.9 \
     pip \
-    diamond \
+    diamond=2.2.4 \
+    psauron=1.1.3 \
     && micromamba clean -a -y
 
 # Install orfipy via pip (requires gcc for Cython compilation)

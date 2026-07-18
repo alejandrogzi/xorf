@@ -33,6 +33,7 @@ process BLAST {
     def upstream = task.ext.upstream ?: 1000
     def downstream = task.ext.downstream ?: 1000
     def prefix = task.ext.prefix ?: "${meta.id}_${meta.name}"
+    def keep_temp = task.ext.keep_temp ? "--keep-temp" : ""
     """
     set +e
     orf blast \\
@@ -46,60 +47,29 @@ process BLAST {
     --database $database \\
     --upstream-flank $upstream \\
     --downstream-flank $downstream \\
-    $args > blast.stdout 2> blast.stderr
-    blast_status=\$?
-    set -e
-
-    cat blast.stdout
-    cat blast.stderr >&2
-
-    shopt -s nullglob
-    result_files=( ${prefix}/orf/*result )
-    blast_empty=false
-
-    if (( \${#result_files[@]} > 0 )); then
-      mv "\${result_files[@]}" ${prefix}/
-      rm -rf ${prefix}/orf
-    elif [[ -f ${prefix}/orf/orf.dedup.pep && ! -s ${prefix}/orf/orf.dedup.pep ]]; then
-      if [[ \$blast_status -eq 0 ]] || grep -q 'Input file seems to be empty' blast.stderr; then
-        blast_empty=true
-        echo "INFO: BLAST produced no candidates after deduplication for ${meta.id}:${meta.name}; skipping output emission." >&2
-      fi
-    fi
-
-    if [[ \$blast_status -ne 0 && \$blast_empty != true ]]; then
-      exit \$blast_status
-    fi
-
-    if [[ \$blast_status -eq 0 && \${#result_files[@]} -eq 0 && \$blast_empty != true ]]; then
-      echo "ERROR: BLAST finished without result files for ${meta.id}:${meta.name}." >&2
-      exit 1
-    fi
-
-    if [[ \${#result_files[@]} -gt 0 ]]; then
-      INITIAL_REGION_COUNT=\$(wc -l < ${bed})
-      TRANSLATION_COUNT=\$(wc -l < ${predictions})
-    fi
-
-    mv ${prefix}/*result ${prefix}/${prefix}.orf.result
+    --prefix $prefix \\
+    $keep_temp \\
+    $args
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         orf-blast: \$(orf --version 2>&1 | sed 's/^.*orf //; s/ .*\$//')
         diamond: \$(diamond version 2>&1 | sed 's/^.*diamond version //' )
+        psauron: \$(psauron --version 2>&1 | sed 's/^.*psauron //; s/ .*\$//')
     END_VERSIONS
     """
 
     stub:
     def prefix = task.ext.prefix ?: "${meta.id}_${meta.name}"
     """
-    touch ${prefix}
-    touch ${prefix}/*
+    touch ${prefix}.orf
+    touch ${prefix}.orf/*
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
         orf-blast: \$(orf --version 2>&1 | sed 's/^.*orf //; s/ .*\$//')
         diamond: \$(diamond version 2>&1 | sed 's/^.*diamond version //' )
+        psauron: \$(psauron --version 2>&1 | sed 's/^.*psauron //; s/ .*\$//')
     END_VERSIONS
     """
 }
