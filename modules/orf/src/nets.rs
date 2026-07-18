@@ -57,11 +57,15 @@ pub fn run_nets(args: NetArgs) {
 
     let net = dir.join("merged.net");
 
-    let netstart = net_map(args.netstart, NetSource::Netstart);
     let transaid = net_map(args.transaid, NetSource::Transaid);
     let bed = get_bed(&args.bed);
 
-    __join_nets(netstart, transaid, bed, &net);
+    if let Some(netstart) = args.netstart {
+        let netstart = net_map(netstart, NetSource::Netstart);
+        __join_nets(netstart, transaid, bed, &net);
+    } else {
+        __join_nets(HashMap::new(), transaid, bed, &net);
+    }
 }
 
 fn __join_nets(

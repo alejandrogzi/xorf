@@ -3,7 +3,7 @@
 __author__ = "Alejandro Gonzales-Irribarren"
 __email__ = "alejandrxgzi@gmail.com"
 __github__ = "https://github.com/alejandrogzi"
-__version__ = "0.0.18"
+__version__ = "0.0.19"
 
 import argparse
 import logging
@@ -44,6 +44,8 @@ BLAST_COLS: List = [
     "blast_offset",
     "blast_length",
     "blast_percentage_aligned",
+    "psauron_score",
+    "blast_reference_id"
 ]
 SAMBA_COLS: List = ["prefix", "rna_score"]
 TAI_MASKING_NAN_COLS: List = [
