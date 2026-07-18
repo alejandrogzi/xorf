@@ -29,9 +29,10 @@ include { WGET as WGET_SAMBA_WEIGHTS } from '../../modules/wget/main.nf'
 
 workflow GET_CANDIDATES {
     take:
-      ch_pairs
-      ch_database
-      samba_weights
+      ch_pairs       // channel: [ meta, path ]
+      ch_database    // channel: [ meta, path ]
+      samba_weights  // path
+      skip_netstart  // boolean
 
     main:
       ch_versions = Channel.empty()
@@ -43,24 +44,36 @@ workflow GET_CANDIDATES {
         samba_weights
       )
 
-      NETSTART(
-        RNASAMBA.out.fasta,
-        RNASAMBA.out.bed
-      )
-
       TRANSAID(
         RNASAMBA.out.fasta,
         RNASAMBA.out.bed
       )
 
-       NETSTART.out.netstart
-        .join(TRANSAID.out.transaid)
-        .join(RNASAMBA.out.bed)
-        .set { ch_nets }
+      if (!skip_netstart) {
+        NETSTART(
+          RNASAMBA.out.fasta,
+          RNASAMBA.out.bed
+        )
 
-      JOIN_NETS(
-          ch_nets
-      )
+        ch_netstart = NETSTART.out.netstart
+  
+        TRANSAID.out.transaid
+          .join(RNASAMBA.out.bed)
+          .join(ch_netstart)
+          .set { ch_nets }
+
+        ch_nets.map { meta, transaid, bed, netstart -> [ meta, transaid, bed ] }.set { ch_transaid }
+        ch_nets.map { meta, transaid, bed, netstart -> [ meta, netstart ] }.set { ch_netstart }
+
+        JOIN_NETS( ch_transaid, ch_netstart )
+        ch_versions = ch_versions.mix(NETSTART.out.versions)
+      } else {
+        TRANSAID.out.transaid
+          .join(RNASAMBA.out.bed)
+          .set { ch_nets }
+
+        JOIN_NETS( ch_nets, Channel.value([[:], []]) )
+      }
 
       TRANSLATION.out.predictions
       .join(JOIN_NETS.out.net)

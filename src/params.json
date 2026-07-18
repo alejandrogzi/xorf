@@ -8,6 +8,9 @@
     "//1.1": "── Protein database [optional; default downloads UniProt/SwissProt] ────",
     "custom_database": null,
 
+    "//1.2": "── Netstart [optional] ───────────────────────────────────────────",
+    "skip_netstart": false,
+
     "//2": "── Selenocysteine masking [optional] ──────────────────────────────────",
     "selenocysteine_sites": null,
 

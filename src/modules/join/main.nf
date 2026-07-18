@@ -15,7 +15,8 @@ process JOIN {
     container 'ghcr.io/alejandrogzi/orf-chunk:latest'
 
     input:
-    tuple val(meta), path(netstart), path(transaid), path(bed)
+    tuple val(meta), path(transaid), path(bed)
+    tuple val(meta1), path(netstart)
 
     output:
     tuple val(meta), path('net/merged.net'), emit: net
@@ -26,11 +27,14 @@ process JOIN {
     task.ext.when == null || task.ext.when
 
     script:
+    def args = task.ext.args ?: ''
+    def nt = ${netstart} ? '--netstart $netstart' : ''
     """
     orf net \\
+    $args \\
     --bed $bed \\
-    --netstart $netstart \\
     --transaid $transaid \\
+    $nt \\
     --outdir .
 
     PREDICTION_COUNT=\$(cat net/merged.net | wc -l)
@@ -43,7 +47,7 @@ process JOIN {
 
     stub:
     """
-    touch net
+    mkdir net
     touch net/merged.net
 
     cat <<-END_VERSIONS > versions.yml

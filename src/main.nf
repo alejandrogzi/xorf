@@ -52,6 +52,7 @@ if (params.help) {
         --selenocysteine_sites PATH      Selenocysteine masking [default: null]
         --predict_min_score_max_predictions FLOAT   Minimum score for ORF predictions [default: 0.50]
         --predict_max_predictions INT  Maximum number of ORF predictions [default: 3]
+        --skip_netstart       BOOL      Skip netstart [default: false]
 
     Profiles:
         local       Run on local machine (default)
@@ -188,14 +189,14 @@ workflow XORF {
       if (params.custom_database.endsWith('.gz')) {
           GUNZIP_DATABASE(
               Channel.value(
-                  [ [id: params.database.tokenize('/')[-1]], params.database ]
+                  [ [id: params.custom_database.tokenize('/')[-1]], params.custom_database ]
               )
           )
           GUNZIP_DATABASE.out.gunzip
             .map { meta, it -> it }
             .set { ch_database }
       } else {
-          ch_database = Channel.fromPath(params.database)
+          ch_database = Channel.fromPath(params.custom_database)
       }
     } else {
       WGET_PROTEIN_DATABASE(
@@ -214,7 +215,8 @@ workflow XORF {
        params.chunk_size,
        ch_samba_weights,
        params.predict_keep_raw,
-       params.selenocysteine_sites
+       params.selenocysteine_sites,
+       params.skip_netstart
     )
 
     PIPELINE_COMPLETION (
