@@ -1,6 +1,6 @@
 <p align="center">
   <p align="center">
-    <img width=100 align="center" src="./assets/figures/logo.png" >
+    <img width=100 align="center" src="./assets/figures/xorf.png" >
   </p>
 
   <p align="center">
