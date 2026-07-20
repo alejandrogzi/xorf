@@ -21,6 +21,8 @@ process CONCAT {
 
     output:
     tuple val(meta), path("*bed"), path("*tsv"), optional: true, emit: files
+    tuple val(meta), path("*.bed"), optional:true, emit: bed
+    tuple val(meta), path("*.tsv"), optional:true, emit: tsv
     path "versions.yml", emit: versions
 
     when:

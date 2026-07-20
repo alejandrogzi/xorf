@@ -20,12 +20,16 @@ include { CHUNKER }      from '../../modules/chunker/main.nf'
 include { CHUNKER as UNMASKED_CHUNKER } from '../../modules/chunker/main.nf'
 include { CONCAT }       from '../../modules/concat/main.nf'
 include { CONCAT as CONCAT_RAW }   from '../../modules/concat/main.nf'
+include { CONCAT as CONCAT_RENAMED }   from '../../modules/concat/main.nf'
+include { CONCAT as CONCAT_RENAMED_RAW }   from '../../modules/concat/main.nf'
 include { GENOMEMASK_SELENO } from '../../modules/genomemask/seleno/main.nf'
 include { GENEPRED_LINT } from '../../modules/genepred/lint/main.nf'
 include { DETACH_DUPLICATES } from '../../modules/detach/main.nf'
 include { ISOTOOLS_TRUNCATION_DETECTOR } from '../../modules/isotools/utr/main.nf'
 include { STRIP_OCCURRENCES as STRIP_TRUNCATIONS } from '../../modules/strip/main.nf'
 include { BEDTOOLS_INTERSECT as BEDTOOLS_INTERSECT_UNMASKED } from '../../modules/bedtools/intersect/main.nf'
+include { RENAME_PREDICTIONS as RENAME_PREDICTIONS_RAW } from '../../modules/rename/main.nf'
+include { RENAME_PREDICTIONS } from '../../modules/rename/main.nf'
 
 include { PREDICT_ORFS } from '../predict_orfs/main.nf'
 include { GET_CANDIDATES } from '../candidates/main.nf'
@@ -139,10 +143,11 @@ workflow XORF {
           .groupTuple()
           .filter { groupKey, metas, beds, tsvs -> !beds.isEmpty() }
           .map { groupKey, metas, beds, tsvs ->
-              return tuple([ id: groupKey, name: metas[0].id, chr: metas[0].chr ], beds, tsvs)
+              return tuple([ id: groupKey, name: metas[0].id, chr: metas[0].chr, masked: metas[0].masked ], beds, tsvs)
           }
           .set { ch_all }
 
+      ch_raw_renamed = Channel.empty()
       if (predict_keep_raw) {
           PREDICT_ORFS.out.raw
               .filter { meta, bed, tsv -> bed.size() > 0 }
@@ -153,21 +158,83 @@ workflow XORF {
               .groupTuple()
               .filter { groupKey, metas, beds, tsvs -> !beds.isEmpty() }
               .map { groupKey, metas, beds, tsvs ->
-                  return tuple([ name: metas[0].id, chr: metas[0].chr, id: groupKey ], beds, tsvs)
+                  return tuple([ name: metas[0].id, chr: metas[0].chr, id: groupKey, masked: metas[0].masked ], beds, tsvs)
               }
               .set { ch_raw }
 
           CONCAT_RAW(
               ch_raw
           )
+
+          RENAME_PREDICTIONS_RAW(
+              CONCAT_RAW.out.bed,
+              CONCAT_RAW.out.tsv
+          )
+
+         RENAME_PREDICTIONS_RAW.out.files
+          .map { meta, beds, tsvs ->
+              [beds, tsvs]
+          }
+          .collect(flat: false)
+          .map { pairs ->
+              def bedFiles = pairs.collectMany { pair ->
+                  pair[0] instanceof Collection ? pair[0] : [pair[0]]
+              }
+
+              def tsvFiles = pairs.collectMany { pair ->
+                  pair[1] instanceof Collection ? pair[1] : [pair[1]]
+              }
+
+              return [
+                  [id: 'renamed', name: 'xorf'],
+                  bedFiles,
+                  tsvFiles
+              ]
+          }
+          .set { ch_raw_renamed }
       }
 
       CONCAT(
           ch_all
       )
 
+      RENAME_PREDICTIONS(
+          CONCAT.out.bed,
+          CONCAT.out.tsv
+      )
+
+      RENAME_PREDICTIONS.out.files
+          .map { meta, beds, tsvs ->
+              [beds, tsvs]
+          }
+          .collect(flat: false)
+          .map { pairs ->
+              def bedFiles = pairs.collectMany { pair ->
+                  pair[0] instanceof Collection ? pair[0] : [pair[0]]
+              }
+
+              def tsvFiles = pairs.collectMany { pair ->
+                  pair[1] instanceof Collection ? pair[1] : [pair[1]]
+              }
+
+              return [
+                  [id: 'renamed', name: 'xorf'],
+                  bedFiles,
+                  tsvFiles
+              ]
+          }
+          .set { ch_renamed }
+
+      CONCAT_RENAMED(
+          ch_renamed
+      )
+
+      CONCAT_RENAMED_RAW(
+          ch_raw_renamed
+      )
+
       DETACH_DUPLICATES(
-            CONCAT.out.files.map { meta, bed, tsv -> tuple(meta, bed) }
+            CONCAT_RENAMED.out.files.map { meta, bed, tsv -> tuple(meta, bed) }
         )
       ch_full_length_transcripts = DETACH_DUPLICATES.out.pass
       ch_duplicates = DETACH_DUPLICATES.out.duplicates
