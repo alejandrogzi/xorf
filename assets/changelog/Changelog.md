@@ -4,6 +4,27 @@ All notable changes to this project are documented below.
 
 ---
 
+## [0.0.38] - 2026-07-20
+
+### Breaking Changes
+- **Prediction renaming stage**: Introduced a dedicated `RENAME_PREDICTIONS` step that rewrites the shared `id` column of every BED12 file and its companion TSV with human-readable, information-rich names. Names follow the `[PREFIX#...]ROOT[#TAG]...[#SC{SCORE}][@PROTEIN]` layout, so downstream identifiers now carry masking state, optional tags, the ORF score, and the BLAST reference in a single token. This changes the identifiers emitted by the pipeline and is not backward compatible with names produced by earlier versions.
+- **Reworked output directory layout**: The results tree has been reorganised to reflect the new renaming and merging stages. `01_duplicates` and `02_results` have been renumbered to `03_duplicates` and `04_results`, and two new directories were added: `01_renamed` (per-region renamed predictions) and `02_merged` (the merged, renamed BED/TSV, with raw predictions under `02_merged/raw`). Any tooling that consumed the previous fixed paths must be updated.
+- **Duplicate detection now consumes renamed output**: `DETACH_DUPLICATES` is fed from the merged, renamed channel (`CONCAT_RENAMED`) instead of the raw concatenation, ensuring the final kept records and truncation stripping operate on the renamed identifiers throughout.
+
+### Features
+- **Content-derived identifiers (`--rebase`)**: When `rename_rebase` is enabled, the full original id is replaced by a short, collision-free BLAKE2s hash so that identical predictions across runs receive identical names. The hash width is grown automatically until uniqueness is guaranteed.
+- **ORF score and protein annotation**: New `rename_append_orf_score` (default: on) and `rename_append_protein_name` (default: on) options append the normalised ORF score (`prob_coding`, scaled 0-100) and the BLAST reference id to each generated name.
+- **Custom prefixes and masking awareness**: Added `rename_custom_prefix` to prepend a user-defined prefix, and the renamer automatically prepends an `UNMASK` prefix for predictions coming from the unmasked branch (propagated via the `masked` metadata field). Prefixes and tags containing the reserved separators `#` or `@` are rejected with a clear error.
+- **Opt-out switch**: Added `rename_deactivate` to copy inputs through unchanged, preserving the original identifiers when renaming is not desired.
+
+### Infrastructure
+- The `CONCAT` module now additionally emits standalone `bed` and `tsv` channels, allowing the renamer to receive the merged files as separate inputs.
+- Added `CONCAT_RENAMED` and `CONCAT_RENAMED_RAW` aliases to merge the renamed predictions (and their raw counterparts) into the new `02_merged` output directory.
+- The completion handler now reports final BED files from `04_results`, matching the updated directory layout.
+
+### Removals
+- **Dropped the email reporting script**: Removed `src/bin/email.py` and the associated HTML/plaintext summary and SMTP/mailx delivery logic. Run summaries are no longer emailed by the pipeline.
+
 ## [0.0.37] - 2026-07-18
 
 ### Breaking Changes
