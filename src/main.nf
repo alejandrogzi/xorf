@@ -239,7 +239,7 @@ workflow XORF {
 
 workflow.onComplete {
     if (workflow.success) {
-        def results_dir = new File(params.outdir as String, '02_results')
+        def results_dir = new File(params.outdir as String, '04_results')
         def final_beds = results_dir.exists() ? (results_dir.listFiles()?.findAll { it.name.endsWith('.bed') } ?: []) : []
         log.info "Pipeline completed successfully!"
         if (final_beds) {

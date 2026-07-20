@@ -111,8 +111,11 @@ PREDICT_ORFS run as SLURM job arrays. Partition routing, array sizes, and resour
 results/
 ├── 00_concat/       *bed
 ├──── 00_concat/raw/ *bed
-├── 01_duplicates/   *bed
-├── 02_results/      *bed
+├── 01_renamed/      *bed
+├── 02_merged/       *bed
+├──── 02_merged/raw/ *bed
+├── 03_duplicates/   *bed
+├── 04_results/      *bed
 └── pipeline_info/    timeline, trace, DAG
 ```
 
