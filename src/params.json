@@ -19,5 +19,12 @@
     "predict_keep_raw": false,
     "predict_min_score_max_predictions": 0.50,
     "predict_max_predictions": 3,
-    "predict_threshold": 0.03
+    "predict_threshold": 0.03,
+
+    "//4": "── Output options ──────────────────────────────────────────────────────",
+    "rename_deactivate": false,
+    "rename_rebase": false,
+    "rename_append_orf_score": true,
+    "rename_append_protein_name": true,
+    "rename_custom_prefix": null
 }

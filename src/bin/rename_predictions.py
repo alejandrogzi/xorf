@@ -6,16 +6,17 @@ tab-separated (TSV) file holding additional metadata for each prediction, and
 rewrites the shared ``id`` column of both files with human-readable,
 information-rich names.
 
-Names are built by combining an optional prefix, a root identifier, optional
-tags, an optional ORF score, and an optional protein (BLAST) reference. The
-resulting identifier has the general shape::
+Input identifiers must have the shape ``ROOT_ORF.N[@M][#DU]`` or
+``ROOT.pN[@M][#DU]``. The terminal marker separates the opaque root from ORF
+metadata; dots and underscores inside the root are preserved. Metadata is
+converted into explicit tags in the renamed identifier. The result has the
+general shape::
 
-    [PREFIX#...]ROOT[#TAG]...[#SC{SCORE}][@PROTEIN]
+    [PREFIX#...]ROOT[#TAG]...[#SC{SCORE}][#DU][#OR{N}][#TI{N}][#IN{M}][@PROTEIN]
 
-By default the root identifier is the part of the original id before the ``@``
-separator. With ``--rebase`` the entire original id is replaced by a short,
-unique, content-derived hash so that identical predictions across runs receive
-identical names.
+With ``--rebase``, the root is replaced by a short, collision-free hash while
+the ORF metadata remains visible as tags. Predictions sharing a root therefore
+share a hash and remain distinguishable by their metadata.
 
 Reserved characters ``#`` and ``@`` are not permitted inside user-supplied
 prefixes or tags because they are used as the structural separators of the
@@ -34,14 +35,17 @@ See :func:`parse_args` for the full list of command-line options.
 
 import argparse
 import hashlib
+import re
 import sys
+from itertools import repeat
+from typing import Iterable, NamedTuple, Optional
 
 import pandas as pd
 
 __author__ = "Alejandro Gonzales-Irribarren"
 __email__ = "alejandrxgzi@gmail.com"
 __github__ = "https://github.com/alejandrogzi"
-__version__ = "0.0.1"
+__version__ = "0.0.4"
 
 BED_COLS = [
     "chrom",
@@ -58,6 +62,57 @@ BED_COLS = [
     "block_starts",
 ]
 RESERVED = {"#", "@"}
+ORF_DELIMITER = "_ORF"
+ORF_METADATA_PATTERN = re.compile(
+    r"^\.(?P<orf_number>\d+)(?:@(?P<inner_number>\d+))?(?P<duplicate>#DU)?$"
+)
+TRANSLATION_ID_PATTERN = re.compile(
+    r"^(?P<root>.+)\.p(?P<orf_number>\d+)"
+    r"(?:@(?P<inner_number>\d+))?(?P<duplicate>#DU)?$"
+)
+
+
+class PredictionId(NamedTuple):
+    """Parsed components of an input prediction identifier."""
+
+    root: str
+    orf_number: str
+    translation_index: Optional[str]
+    inner_number: Optional[str]
+    is_duplicate: bool
+
+
+def parse_prediction_id(value: str) -> PredictionId:
+    """Parse either supported prediction ID without interpreting its root."""
+    if ORF_DELIMITER in value:
+        parts = value.split(ORF_DELIMITER)
+        if len(parts) != 2 or not parts[0]:
+            raise ValueError(
+                "Prediction ID must contain exactly one '_ORF' delimiter after "
+                f"a non-empty root: {value!r}"
+            )
+
+        root, metadata = parts
+        match = ORF_METADATA_PATTERN.fullmatch(metadata)
+        translation_index = None
+    else:
+        match = TRANSLATION_ID_PATTERN.fullmatch(value)
+        root = match.group("root") if match is not None else ""
+        translation_index = match.group("orf_number") if match is not None else None
+
+    if match is None:
+        raise ValueError(
+            "Prediction ID must end in '_ORF.N' or '.pN', optionally followed "
+            f"by '@M' and '#DU': {value!r}"
+        )
+
+    return PredictionId(
+        root=root,
+        orf_number=match.group("orf_number"),
+        translation_index=translation_index,
+        inner_number=match.group("inner_number"),
+        is_duplicate=match.group("duplicate") is not None,
+    )
 
 
 def validate_token(value: str, label: str) -> str:
@@ -72,32 +127,41 @@ def validate_token(value: str, label: str) -> str:
     return value
 
 
-def short_hashes(ids: list[str]) -> dict[str, str]:
-    """Map each unique identifier to a short, collision-free hash.
+def short_hashes(values: Iterable[str]) -> dict[str, str]:
+    """Map each unique root to the shortest collision-free 64-bit hash prefix.
 
-    For every distinct ``id`` a 64-bit BLAKE2s digest is computed. The digest
-    is then truncated to the smallest prefix length (between 4 and 16 hex
-    characters) that keeps all generated hashes unique among the inputs, and
-    prefixed with ``h`` to form the replacement root name.
+    A 64-bit BLAKE2s digest is computed once per distinct root. Sorted integer
+    digests make it possible to derive the required prefix width from adjacent
+    values in one pass, avoiding repeated large temporary sets. The digest map
+    is then converted to its final string values in place to limit peak memory.
 
     Raises
     ------
     ValueError
-        If no prefix width between 4 and 16 yields a set of unique hashes,
-        which can only happen with an impractically large number of inputs.
+        If two distinct roots have the same complete 64-bit digest.
     """
-    unique_ids = sorted(set(ids))
-    digests = {
-        value: hashlib.blake2s(value.encode(), digest_size=8).hexdigest()
-        for value in unique_ids
-    }
+    digests = {}
+    for value in values:
+        if value not in digests:
+            digest = hashlib.blake2s(value.encode(), digest_size=8).digest()
+            digests[value] = int.from_bytes(digest, byteorder="big")
 
-    for width in range(4, 17):
-        values = [digest[:width] for digest in digests.values()]
-        if len(values) == len(set(values)):
-            return {key: f"h{digest[:width]}" for key, digest in digests.items()}
+    sorted_digests = sorted(digests.values())
+    width = 4
+    for previous, current in zip(sorted_digests, sorted_digests[1:]):
+        differing_bits = previous ^ current
+        if differing_bits == 0:
+            raise ValueError(
+                "Two distinct prediction roots produced the same 64-bit hash"
+            )
+        shared_nibbles = (64 - differing_bits.bit_length()) // 4
+        width = max(width, shared_nibbles + 1)
 
-    raise ValueError("Could not generate unique short hashes")
+    del sorted_digests
+
+    for root, digest in digests.items():
+        digests[root] = f"h{digest:016x}"[: width + 1]
+    return digests
 
 
 def format_score(value: str) -> str:
@@ -132,8 +196,8 @@ def parse_args() -> argparse.Namespace:
         ``deactivate``
             When set, copy the inputs unchanged to the outputs and exit.
         ``rebase``
-            Replace the entire id with a short content hash instead of keeping
-            the original root.
+            Replace the parsed root with a short content hash while preserving
+            ORF metadata as tags.
         ``append_orf_score``
             Append the ORF score (from ``score_column``) to each name.
         ``score_column``
@@ -174,7 +238,7 @@ def main() -> None:
 
     if bed.shape[1] > len(BED_COLS):
         print(f"WARN: BED12 has {bed.shape[1]} columns; dropping extra columns")
-        bed.drop(columns=bed.columns[len(BED_COLS):], inplace=True)
+        bed.drop(columns=bed.columns[len(BED_COLS) :], inplace=True)
 
     bed.columns = BED_COLS
 
@@ -206,33 +270,52 @@ def main() -> None:
         prefix_parts.append(validate_token(args.custom_prefix, "custom prefix"))
 
     tags = [validate_token(tag, "tag").upper() for tag in args.tag]
-    hash_map = short_hashes(tsv["id"].tolist()) if args.rebase else {}
-    records = tsv.set_index("id", drop=False).to_dict("index")
 
     if args.append_orf_score and args.score_column not in tsv.columns:
         raise ValueError(f"TSV is missing score column {args.score_column!r}")
     if args.append_protein_name and "blast_reference_id" not in tsv.columns:
         raise ValueError("TSV is missing the 'blast_reference_id' column")
 
+    hash_map = (
+        short_hashes(parse_prediction_id(old_id).root for old_id in tsv["id"])
+        if args.rebase
+        else {}
+    )
+
+    scores = tsv[args.score_column] if args.append_orf_score else repeat("")
+    proteins = tsv["blast_reference_id"] if args.append_protein_name else repeat("")
+
     rename_map = {}
-    for old_id, row in records.items():
-        root, separator, existing_protein = old_id.partition("@")
-        name = f"xORF#{hash_map[old_id]}" if args.rebase else root
+    generated_ids = set()
+    for old_id, score, protein in zip(tsv["id"], scores, proteins):
+        parsed = parse_prediction_id(old_id)
+        name_parts = list(prefix_parts)
 
-        if prefix_parts:
-            name = "#".join(prefix_parts + [name])
-        if tags:
-            name += "#" + "#".join(tags)
-        if args.append_orf_score and row[args.score_column] != "":
-            name += f"#SC{format_score(row[args.score_column])}"
+        if args.rebase:
+            name_parts.extend(["xORF", hash_map[parsed.root]])
+        else:
+            name_parts.append(parsed.root)
 
-        protein = row.get("blast_reference_id", "") if args.append_protein_name else ""
-        if not args.rebase and not args.append_protein_name and separator:
-            protein = existing_protein
+        name_parts.extend(tags)
+        if args.append_orf_score and score != "":
+            name_parts.append(f"SC{format_score(score)}")
+        if parsed.is_duplicate:
+            name_parts.append("DU")
+        name_parts.append(f"OR{parsed.orf_number}")
+        if parsed.translation_index is not None:
+            name_parts.append(f"TI")
+        if parsed.inner_number is not None:
+            name_parts.append(f"IN{parsed.inner_number}")
+
+        name = "#".join(name_parts)
         if protein:
             name += f"@{protein}"
 
+        if name in generated_ids:
+            raise ValueError(f"Renaming produced a duplicate ID: {name!r}")
+        generated_ids.add(name)
         rename_map[old_id] = name
+    del generated_ids
 
     bed["id"] = bed["id"].map(rename_map)
     tsv["id"] = tsv["id"].map(rename_map)

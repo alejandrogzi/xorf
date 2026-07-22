@@ -51,6 +51,7 @@ workflow XORF {
       predict_keep_raw     // boolean
       selenocysteine_sites // path
       skip_netstart        // boolean
+      rename_deactivate    // boolean
 
     main:
       def ch_regions  = regions
@@ -58,11 +59,17 @@ workflow XORF {
       def ch_database = database
       def chunkSize   = chunk_size ?: 20
 
+      def localHash = randomHash()
+
       def ch_versions = Channel.empty()
+
+      // Linting //////////////////////////////////////////////////////////
 
       GENEPRED_LINT(
         ch_regions
       )
+
+      // Chunking /////////////////////////////////////////////////////////
 
       ch_unmasked_chunked_regions = Channel.empty()
       ch_unmasked_chunked_sequences = Channel.empty()
@@ -75,7 +82,7 @@ workflow XORF {
           )
 
           CHUNKER(
-              ch_regions.map { meta, file -> [ meta + [masked: true], file ] },
+              ch_regions.map { meta, file -> [ meta + [ masked: true, hash: localHash ], file ] },
               GENOMEMASK_SELENO.out.fasta.first(),
               chunkSize,
           )
@@ -86,7 +93,7 @@ workflow XORF {
           )
           UNMASKED_CHUNKER(
               BEDTOOLS_INTERSECT_UNMASKED.out.bed
-                .map { meta, file -> [ meta + [chr:'unmasked', masked: false], file ] },
+                .map { meta, file -> [ meta + [ chr:'UNMSK', masked: false, hash: localHash ], file ] },
               ch_sequence.map { it -> [ [ id: it.baseName ], it ] },
               chunkSize,
           )
@@ -98,17 +105,19 @@ workflow XORF {
       } else {
           CHUNKER(
               ch_regions,
-              ch_sequence.map { it -> [ [ id: it.baseName ], it ] },
+              ch_sequence.map { it -> [ [ id: it.baseName, hash: localHash ], it ] },
               chunkSize,
           )
       }
+
+      // Joining /////////////////////////////////////////////////////////
 
       CHUNKER.out.chunked_regions
           .mix(ch_unmasked_chunked_regions)
           .flatMap { meta, region -> 
               def regions = region instanceof List ? region : [region]
               regions.collect { it ->
-                [ meta + [name: it.baseName], it] }
+                [ meta + [ name: it.baseName ], it] }
               }
           .join(
               CHUNKER.out.chunked_sequences
@@ -116,10 +125,12 @@ workflow XORF {
                 .flatMap { meta, fasta -> 
                     def fas = fasta instanceof List ? fasta : [fasta]
                     fas.collect { it ->
-                      [ meta + [name: it.baseName], it] }
+                      [ meta + [ name: it.baseName ], it] }
                 }
           )
           .set { ch_pairs }
+
+      // Prediction ///////////////////////////////////////////////////////
 
       GET_CANDIDATES(
           ch_pairs,
@@ -143,9 +154,11 @@ workflow XORF {
           .groupTuple()
           .filter { groupKey, metas, beds, tsvs -> !beds.isEmpty() }
           .map { groupKey, metas, beds, tsvs ->
-              return tuple([ id: groupKey, name: metas[0].id, chr: metas[0].chr, masked: metas[0].masked ], beds, tsvs)
+              return tuple([ id: groupKey, name: metas[0].id, chr: metas[0].chr, masked: metas[0].masked, hash: localHash ], beds, tsvs)
           }
           .set { ch_all }
+
+      // Renaming /////////////////////////////////////////////////////////
 
       ch_raw_renamed = Channel.empty()
       if (predict_keep_raw) {
@@ -158,7 +171,7 @@ workflow XORF {
               .groupTuple()
               .filter { groupKey, metas, beds, tsvs -> !beds.isEmpty() }
               .map { groupKey, metas, beds, tsvs ->
-                  return tuple([ name: metas[0].id, chr: metas[0].chr, id: groupKey, masked: metas[0].masked ], beds, tsvs)
+                  return tuple([ name: metas[0].id, chr: metas[0].chr, id: groupKey, masked: metas[0].masked, hash: localHash ], beds, tsvs)
               }
               .set { ch_raw }
 
@@ -166,78 +179,104 @@ workflow XORF {
               ch_raw
           )
 
-          RENAME_PREDICTIONS_RAW(
-              CONCAT_RAW.out.bed,
-              CONCAT_RAW.out.tsv
-          )
+          if (!rename_deactivate) {
+              RENAME_PREDICTIONS_RAW(
+                  CONCAT_RAW.out.bed,
+                  CONCAT_RAW.out.tsv
+              )
 
-         RENAME_PREDICTIONS_RAW.out.files
-          .map { meta, beds, tsvs ->
-              [beds, tsvs]
-          }
-          .collect(flat: false)
-          .map { pairs ->
-              def bedFiles = pairs.collectMany { pair ->
-                  pair[0] instanceof Collection ? pair[0] : [pair[0]]
+             RENAME_PREDICTIONS_RAW.out.files
+              .map { metas, beds, tsvs ->
+                  [beds, tsvs, metas]
               }
+              .collect(flat: false)
+              .map { pairs ->
+                  def bedFiles = pairs.collectMany { pair ->
+                      pair[0] instanceof Collection ? pair[0] : [pair[0]]
+                  }
 
-              def tsvFiles = pairs.collectMany { pair ->
-                  pair[1] instanceof Collection ? pair[1] : [pair[1]]
+                  def tsvFiles = pairs.collectMany { pair ->
+                      pair[1] instanceof Collection ? pair[1] : [pair[1]]
+                  }
+
+                  def metadataFiles = pairs.collectMany { pair ->
+                      pair[2] instanceof Collection ? pair[2] : [pair[2]]
+                  }
+
+                  def newId = metadataFiles[0].id 
+                  return [
+                      [ id: newId, name: localHash ],
+                      bedFiles,
+                      tsvFiles
+                  ]
               }
-
-              return [
-                  [id: 'renamed', name: 'xorf'],
-                  bedFiles,
-                  tsvFiles
-              ]
+              .set { ch_raw_renamed }
           }
-          .set { ch_raw_renamed }
       }
+      
+      // Concatenation /////////////////////////////////////////////////////
 
       CONCAT(
           ch_all
       )
 
-      RENAME_PREDICTIONS(
-          CONCAT.out.bed,
-          CONCAT.out.tsv
-      )
+      // Renaming /////////////////////////////////////////////////////////
 
-      RENAME_PREDICTIONS.out.files
-          .map { meta, beds, tsvs ->
-              [beds, tsvs]
-          }
-          .collect(flat: false)
-          .map { pairs ->
-              def bedFiles = pairs.collectMany { pair ->
-                  pair[0] instanceof Collection ? pair[0] : [pair[0]]
+      ch_full_length_with_duplicates = Channel.empty()
+      if (!rename_deactivate) {
+          RENAME_PREDICTIONS(
+              CONCAT.out.bed,
+              CONCAT.out.tsv
+          )
+
+          RENAME_PREDICTIONS.out.files
+              .map { metas, beds, tsvs ->
+                  [beds, tsvs, metas]
               }
+              .collect(flat: false)
+              .map { pairs ->
+                  def bedFiles = pairs.collectMany { pair ->
+                      pair[0] instanceof Collection ? pair[0] : [pair[0]]
+                  }
 
-              def tsvFiles = pairs.collectMany { pair ->
-                  pair[1] instanceof Collection ? pair[1] : [pair[1]]
+                  def tsvFiles = pairs.collectMany { pair ->
+                      pair[1] instanceof Collection ? pair[1] : [pair[1]]
+                  }
+
+                  def metadataFiles = pairs.collectMany { pair ->
+                      pair[2] instanceof Collection ? pair[2] : [pair[2]]
+                  }
+
+                  def newId = metadataFiles[0].id
+                  return [
+                      [ id: newId, name: localHash ],
+                      bedFiles,
+                      tsvFiles
+                  ]
               }
+              .set { ch_renamed }
 
-              return [
-                  [id: 'renamed', name: 'xorf'],
-                  bedFiles,
-                  tsvFiles
-              ]
-          }
-          .set { ch_renamed }
+          // INFO: process uses 
+          // > [meta.id, meta.name].findAll { it }.join('.') as new prefix
+          CONCAT_RENAMED(
+              ch_renamed
+          )
+          ch_full_length_with_duplicates = CONCAT_RENAMED.out.files.map { meta, bed, tsv -> tuple(meta, bed) }
 
-      CONCAT_RENAMED(
-          ch_renamed
-      )
+          CONCAT_RENAMED_RAW(
+              ch_raw_renamed
+          )
+      } else {
+          ch_full_length_with_duplicates = CONCAT.out.files.map { meta, bed, tsv -> tuple(meta, bed) }
+      }
 
-      CONCAT_RENAMED_RAW(
-          ch_raw_renamed
-      )
+      // Duplicates ///////////////////////////////////////////////////////
 
-      DETACH_DUPLICATES(
-            CONCAT_RENAMED.out.files.map { meta, bed, tsv -> tuple(meta, bed) }
-        )
+      DETACH_DUPLICATES( ch_full_length_with_duplicates )
       ch_full_length_transcripts = DETACH_DUPLICATES.out.pass
       ch_duplicates = DETACH_DUPLICATES.out.duplicates
+
+      // Truncation ///////////////////////////////////////////////////////
 
       ISOTOOLS_TRUNCATION_DETECTOR(
           ch_full_length_transcripts
@@ -247,6 +286,8 @@ workflow XORF {
           ISOTOOLS_TRUNCATION_DETECTOR.out.descriptor,
           "TRUNCATED"
       )
+
+      // Counts ///////////////////////////////////////////////////////////
 
       PREDICT_ORFS.out.counts
       .map { meta, initial, transaid, ns_td, tai, blast, samba, all, unique, kept ->
@@ -278,4 +319,16 @@ workflow XORF {
       files = CONCAT.out.files
       counts = ch_counts
       versions = ch_pipeline_versions
+}
+
+/*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    FUNCTIONS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*/
+
+def randomHash() {
+    def chars = ('0'..'9') + ('a'..'z') + ('A'..'Z')
+    def random = new Random()
+    return (1..6).collect { chars[random.nextInt(chars.size())] }.join()
 }

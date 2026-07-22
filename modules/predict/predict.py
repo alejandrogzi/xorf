@@ -3,7 +3,7 @@
 __author__ = "Alejandro Gonzales-Irribarren"
 __email__ = "alejandrxgzi@gmail.com"
 __github__ = "https://github.com/alejandrogzi"
-__version__ = "0.0.19"
+__version__ = "0.0.20"
 
 import argparse
 import logging
@@ -409,26 +409,10 @@ def map_to_blocks(
     log.info(f"INFO: Alignments has {len(bed)} rows!")
     log.info(f"INFO: Alignments looks like this:\n{bed[[0, 3]].head()}")
 
-    merged = (
-        bed.assign(prefix=bed[3])
-        .merge(
-            table[["prefix", "start", "end", "prob_coding", "id"]],
-            on="prefix",
-            how="left",
-        )
-        .dropna(subset=["start"])
-        .assign(
-            start=lambda df: df["start"].astype(int),
-            end=lambda df: df["end"].astype(int),
-        )
-    )
+    merged = _map_predictions_to_bed(bed, table)
 
     log.info(f"INFO: Merged table has {len(merged)} rows!")
     log.info(f"INFO: Merged table looks like this:\n{merged.head()}")
-
-    merged[3] = merged["id"]
-    merged[6] = merged["start"]
-    merged[7] = merged["end"]
 
     if keep_raw:
         merged.drop(columns=["prefix", "start", "end", "id"]).to_csv(
@@ -444,41 +428,66 @@ def map_to_blocks(
 
     table = (
         table[table["prob_coding"] >= min_score_max_predictions]
-        .sort_values("prob_coding", ascending=False)
-        .groupby("prefix")
+        .sort_values("prob_coding", ascending=False, kind="stable")
+        .groupby("prefix", sort=False)
         .head(max_predictions)
         .reset_index(drop=True)
     )
 
     # INFO: add #DU tag to non-best predictions
-    table["rank"] = table.groupby("prefix").cumcount() + 1
+    table["rank"] = table.groupby("prefix", sort=False).cumcount() + 1
     table.loc[table["rank"] > 1, "id"] += "#DU"
 
     log.info(f"INFO: Final size of table: {len(table)}")
-    log.info(f"INFO: Writing predictions to {outdir}/{prefix}.predictions.tsv")
+    merged = _map_predictions_to_bed(bed, table)
 
+    table_ids = set(table["id"])
+    bed_ids = set(merged[3])
+    if table_ids != bed_ids:
+        missing_from_bed = sorted(table_ids - bed_ids)[:5]
+        missing_from_tsv = sorted(bed_ids - table_ids)[:5]
+        raise ValueError(
+            "ERROR: Prediction BED/TSV IDs differ before writing; "
+            f"missing from BED: {missing_from_bed}; "
+            f"missing from TSV: {missing_from_tsv}"
+        )
+
+    log.info(f"INFO: Writing predictions to {outdir}/{prefix}.predictions.tsv")
     table.drop(columns=["prefix", "rank"]).to_csv(
         f"{outdir}/{prefix}.predictions.tsv", index=False, header=True, sep="\t"
     )
 
-    merged = (
-        merged[merged["prob_coding"] >= min_score_max_predictions]
-        .sort_values("prob_coding", ascending=False)
-        .groupby("prefix")
-        .head(max_predictions)
-        .reset_index(drop=True)
-    )
-
-    # INFO: add #DU tag to non-best predictions
-    merged["rank"] = merged.groupby("prefix").cumcount() + 1
-    merged.loc[merged["rank"] > 1, 3] += "#DU"
-
     log.info(f"INFO: Writing predictions to {outdir}/{prefix}.predictions.bed")
-    merged.drop(columns=["prefix", "start", "end", "prob_coding", "rank", "id"]).to_csv(
+    merged.drop(columns=["prefix", "start", "end", "prob_coding", "id"]).to_csv(
         f"{outdir}/{prefix}.predictions.bed", sep="\t", header=False, index=False
     )
 
     return
+
+
+def _map_predictions_to_bed(
+    bed: pd.DataFrame,
+    table: pd.DataFrame,
+) -> pd.DataFrame:
+    """Map prediction coordinates and identifiers onto BED alignment blocks."""
+    merged = (
+        bed.assign(prefix=bed[3])
+        .merge(
+            table[["prefix", "start", "end", "prob_coding", "id"]],
+            on="prefix",
+            how="left",
+        )
+        .dropna(subset=["start"])
+        .assign(
+            start=lambda df: df["start"].astype(int),
+            end=lambda df: df["end"].astype(int),
+        )
+    )
+
+    merged[3] = merged["id"]
+    merged[6] = merged["start"]
+    merged[7] = merged["end"]
+    return merged
 
 
 def predict(
