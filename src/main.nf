@@ -157,6 +157,7 @@ workflow XORF {
     log.info """
     > xorf v${workflow.manifest.version}
     > End-to-end robust and comprehensive ORF prediction pipeline
+    > The Hiller Lab at the Senckenberg Research Institute
 
     Authors: ${workflow.manifest.author}
     Github:  ${workflow.manifest.homePage}
@@ -218,7 +219,8 @@ workflow XORF {
        params.selenocysteine_sites,
        params.skip_netstart,
        params.rename_deactivate,
-       params.do_polishing
+       params.do_polishing,
+       params.skip_joined_concat
     )
 
     PIPELINE_COMPLETION (
