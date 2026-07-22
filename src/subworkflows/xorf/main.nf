@@ -53,6 +53,7 @@ workflow XORF {
       skip_netstart        // boolean
       rename_deactivate    // boolean
       do_polishing         // boolean
+      skip_joined_concat   // boolean
 
     main:
       def ch_regions  = regions
@@ -231,44 +232,49 @@ workflow XORF {
               CONCAT.out.tsv
           )
 
-          RENAME_PREDICTIONS.out.files
-              .map { metas, beds, tsvs ->
-                  [beds, tsvs, metas]
-              }
-              .collect(flat: false)
-              .map { pairs ->
-                  def bedFiles = pairs.collectMany { pair ->
-                      pair[0] instanceof Collection ? pair[0] : [pair[0]]
-                  }
+          if (!skip_joined_concat) {
+            RENAME_PREDICTIONS.out.files
+                .map { metas, beds, tsvs ->
+                    [beds, tsvs, metas]
+                }
+                .collect(flat: false)
+                .map { pairs ->
+                    def bedFiles = pairs.collectMany { pair ->
+                        pair[0] instanceof Collection ? pair[0] : [pair[0]]
+                    }
 
-                  def tsvFiles = pairs.collectMany { pair ->
-                      pair[1] instanceof Collection ? pair[1] : [pair[1]]
-                  }
+                    def tsvFiles = pairs.collectMany { pair ->
+                        pair[1] instanceof Collection ? pair[1] : [pair[1]]
+                    }
 
-                  def metadataFiles = pairs.collectMany { pair ->
-                      pair[2] instanceof Collection ? pair[2] : [pair[2]]
-                  }
+                    def metadataFiles = pairs.collectMany { pair ->
+                        pair[2] instanceof Collection ? pair[2] : [pair[2]]
+                    }
 
-                  def newId = metadataFiles[0].id
-                  return [
-                      [ id: newId, name: localHash ],
-                      bedFiles,
-                      tsvFiles
-                  ]
-              }
-              .set { ch_renamed }
+                    def newId = metadataFiles[0].id
+                    return [
+                        [ id: newId, name: localHash ],
+                        bedFiles,
+                        tsvFiles
+                    ]
+                }
+                .set { ch_renamed }
 
-          // INFO: process uses 
-          // > [meta.id, meta.name].findAll { it }.join('.') as new prefix
-          CONCAT_RENAMED(
-              ch_renamed
-          )
-          ch_full_length_with_duplicates = CONCAT_RENAMED.out.files.map { meta, bed, tsv -> tuple(meta, bed) }
-          ch_full_length_predictions = CONCAT_RENAMED.out.files
+            // INFO: process uses 
+            // > [meta.id, meta.name].findAll { it }.join('.') as new prefix
+            CONCAT_RENAMED(
+                ch_renamed
+            )
+            ch_full_length_with_duplicates = CONCAT_RENAMED.out.files.map { meta, bed, tsv -> tuple(meta, bed) }
+            ch_full_length_predictions = CONCAT_RENAMED.out.files
 
-          CONCAT_RENAMED_RAW(
-              ch_raw_renamed
-          )
+            CONCAT_RENAMED_RAW(
+                ch_raw_renamed
+            )
+          } else {
+            ch_full_length_with_duplicates = RENAME_PREDICTIONS.out.bed
+            ch_full_length_predictions = RENAME_PREDICTIONS.out.files
+          }
       } else {
           ch_full_length_with_duplicates = CONCAT.out.files.map { meta, bed, tsv -> tuple(meta, bed) }
           ch_full_length_predictions = CONCAT.out.files
