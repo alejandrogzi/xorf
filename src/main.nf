@@ -208,7 +208,7 @@ workflow XORF {
     }
 
     MAIN (
-       Channel.fromPath(params.regions).map { it -> [ [id: it.baseName, chr:'xorf'], it ] },
+       Channel.fromPath(params.regions).map { it -> [ [id: it.baseName, chr: randomHash()], it ] },
        Channel.fromPath(params.sequence),
        ch_database,
        params.outdir,
@@ -216,7 +216,8 @@ workflow XORF {
        ch_samba_weights,
        params.predict_keep_raw,
        params.selenocysteine_sites,
-       params.skip_netstart
+       params.skip_netstart,
+       params.rename_deactivate
     )
 
     PIPELINE_COMPLETION (
@@ -229,6 +230,18 @@ workflow XORF {
         MAIN.out.counts,
         MAIN.out.versions
     )
+}
+
+/*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    FUNCTIONS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+*/
+
+def randomHash() {
+    def chars = ('0'..'9') + ('a'..'z') + ('A'..'Z')
+    def random = new Random()
+    return (1..6).collect { chars[random.nextInt(chars.size())] }.join()
 }
 
 /*
