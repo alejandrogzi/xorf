@@ -217,7 +217,8 @@ workflow XORF {
        params.predict_keep_raw,
        params.selenocysteine_sites,
        params.skip_netstart,
-       params.rename_deactivate
+       params.rename_deactivate,
+       params.do_polishing
     )
 
     PIPELINE_COMPLETION (
@@ -252,12 +253,19 @@ def randomHash() {
 
 workflow.onComplete {
     if (workflow.success) {
+        def intermediate_dir = new File(params.outdir as String, '02_merged')
+        def intermediate_beds = intermediate_dir.exists() ? (intermediate_dir.listFiles()?.findAll { it.name.endsWith('.bed') } ?: []) : []
+        
         def results_dir = new File(params.outdir as String, '04_results')
         def final_beds = results_dir.exists() ? (results_dir.listFiles()?.findAll { it.name.endsWith('.bed') } ?: []) : []
         log.info "Pipeline completed successfully!"
         if (final_beds) {
             log.info "Final predictions: ${final_beds.collect { it.toString() }.join(', ')}"
         } else {
+            if (intermediate_beds) {
+                log.info "Final predictions: ${intermediate_beds.collect { it.toString() }.join(', ')}"
+            }
+
             log.warn "Pipeline reported success but final bed file was not produced - check that all steps ran"
         }
         log.info "Run time   : ${workflow.duration}"
