@@ -52,6 +52,7 @@ workflow XORF {
       selenocysteine_sites // path
       skip_netstart        // boolean
       rename_deactivate    // boolean
+      do_polishing         // boolean
 
     main:
       def ch_regions  = regions
@@ -223,6 +224,7 @@ workflow XORF {
       // Renaming /////////////////////////////////////////////////////////
 
       ch_full_length_with_duplicates = Channel.empty()
+      ch_full_length_predictions = Channel.empty()
       if (!rename_deactivate) {
           RENAME_PREDICTIONS(
               CONCAT.out.bed,
@@ -262,30 +264,34 @@ workflow XORF {
               ch_renamed
           )
           ch_full_length_with_duplicates = CONCAT_RENAMED.out.files.map { meta, bed, tsv -> tuple(meta, bed) }
+          ch_full_length_predictions = CONCAT_RENAMED.out.files
 
           CONCAT_RENAMED_RAW(
               ch_raw_renamed
           )
       } else {
           ch_full_length_with_duplicates = CONCAT.out.files.map { meta, bed, tsv -> tuple(meta, bed) }
+          ch_full_length_predictions = CONCAT.out.files
       }
 
-      // Duplicates ///////////////////////////////////////////////////////
+      if (do_polishing) {
+          // Duplicates ///////////////////////////////////////////////////////
 
-      DETACH_DUPLICATES( ch_full_length_with_duplicates )
-      ch_full_length_transcripts = DETACH_DUPLICATES.out.pass
-      ch_duplicates = DETACH_DUPLICATES.out.duplicates
+          DETACH_DUPLICATES( ch_full_length_with_duplicates )
+          ch_full_length_transcripts = DETACH_DUPLICATES.out.pass
+          ch_duplicates = DETACH_DUPLICATES.out.duplicates
 
-      // Truncation ///////////////////////////////////////////////////////
+          // Truncation ///////////////////////////////////////////////////////
 
-      ISOTOOLS_TRUNCATION_DETECTOR(
-          ch_full_length_transcripts
-      )
-      STRIP_TRUNCATIONS(
-          ch_full_length_transcripts,
-          ISOTOOLS_TRUNCATION_DETECTOR.out.descriptor,
-          "TRUNCATED"
-      )
+          ISOTOOLS_TRUNCATION_DETECTOR(
+              ch_full_length_transcripts
+          )
+          STRIP_TRUNCATIONS(
+              ch_full_length_transcripts,
+              ISOTOOLS_TRUNCATION_DETECTOR.out.descriptor,
+              "TRUNCATED"
+          )
+      }
 
       // Counts ///////////////////////////////////////////////////////////
 
@@ -316,7 +322,7 @@ workflow XORF {
       ch_versions = ch_versions.mix(PREDICT_ORFS.out.versions)
 
     emit:
-      files = CONCAT.out.files
+      files = ch_full_length_predictions // [ meta, bed, tsv ]
       counts = ch_counts
       versions = ch_pipeline_versions
 }
