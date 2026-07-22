@@ -4,6 +4,28 @@ All notable changes to this project are documented below.
 
 ---
 
+## [0.0.39] - 2026-07-22
+
+### Breaking Changes
+- **`rename_deactivate` is now effective**: The `rename_deactivate` flag introduced in 0.0.38 is properly wired end-to-end. When enabled, both the main and raw renaming stages are skipped entirely; the concatenated BED and TSV pass through unchanged, with no identifier rewriting or tag injection. This was previously declared but not enforced in the subworkflow logic.
+- **Reworked prediction renaming process**: The renamer was substantially rewritten to parse structured input identifiers (`ROOT_ORF.N[@M][#DU]` or `ROOT.pN[@M][#DU]`) and decompose them into explicit metadata tags. The output identifier now carries the ORF number (`#OR`), translation index (`#TI`), inner number (`#IN`), and duplicate marker (`#DU`) as separate structural tokens rather than embedding them opaquely. The naming layout is now `[PREFIX#...]ROOT[#TAG]...[#SC{SCORE}][#DU][#OR{N}][#TI{N}][#IN{M}][@PROTEIN]`, replacing the previous format.
+- **Tag conversion from raw identifiers**: ORF metadata that was previously encoded in the prediction identifier string is now explicitly converted into tags during renaming. The `#DU` duplicate marker, ORF number, translation index, and inner number are parsed from the input id and emitted as independent tags, making downstream filtering and interpretation more straightforward.
+- **Duplicate ID detection in the renamer**: The renaming stage now raises an error if two distinct predictions produce the same output identifier, preventing silent data loss from hash collisions or malformed inputs.
+- **Region channel uses random hashes**: The region channel metadata now uses a 6-character random alphanumeric hash (`chr` field) instead of a hardcoded `'xorf'` string, avoiding metadata collisions when multiple pipeline runs share the same work directory.
+
+### Features
+- **`--rebase` preserves ORF metadata**: When content-derived hashing is enabled, only the parsed root is replaced by the short BLAKE2s hash; ORF metadata (number, translation index, inner number, duplicate marker) is preserved as visible tags in the renamed identifier. Predictions sharing a root therefore share a hash and remain distinguishable by their metadata.
+- **Hash computation refactored for performance**: The `short_hashes` function now operates on integer digests and derives the required prefix width from adjacent sorted values in a single pass, avoiding repeated set construction. Peak memory usage is reduced by converting digests in place.
+- **`predict.py` deduplicates BED/TSV mapping logic**: The inline merge-and-assign block that mapped prediction coordinates onto BED alignment blocks was extracted into a standalone `_map_predictions_to_bed` function. A pre-write consistency check now verifies that the BED and TSV ID sets match before writing output files, catching mismatches early.
+- **Stable sort for prediction ranking**: The `groupby().sort_values()` calls in `predict.py` now use `kind="stable"` and `sort=False` on the groupby, preserving the original input order within groups and improving reproducibility across platforms.
+- **Renamer configuration in test profile**: The `test` Nextflow profile now exposes all rename-related parameters (`rename_deactivate`, `rename_rebase`, `rename_append_orf_score`, `rename_append_protein_name`, `rename_custom_prefix`) with explicit defaults, ensuring reproducible test runs.
+- **`params.json` extended with output options**: The `params.json` schema now includes the full set of renaming parameters under a documented output options section.
+
+### Infrastructure
+- The `CONCAT_RENAMED` and `CONCAT_RENAMED_RAW` modules now propagate metadata from the rename stage through the collect/map chain, enabling the merged channel to carry the correct `meta.id` for downstream directory naming instead of a hardcoded `'renamed'` identifier.
+- The subworkflow now passes `rename_deactivate` as a dedicated input to the `XORF` workflow and threads it through both the main and raw renaming branches.
+- Added a `randomHash()` utility function in both `main.nf` and the subworkflow to generate consistent random hashes for metadata fields.
+
 ## [0.0.38] - 2026-07-20
 
 ### Breaking Changes
