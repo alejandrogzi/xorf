@@ -17,6 +17,7 @@ process JOIN {
     input:
     tuple val(meta), path(transaid), path(bed)
     tuple val(meta1), path(netstart)
+    val skip_netstart
 
     output:
     tuple val(meta), path('net/merged.net'), emit: net
@@ -28,7 +29,7 @@ process JOIN {
 
     script:
     def args = task.ext.args ?: ''
-    def include_netstart = params.skip_netstart ? "" : "--netstart $netstart"
+    def include_netstart = skip_netstart ? "" : "--netstart $netstart"
     """
     orf net \\
     $args \\

@@ -65,14 +65,14 @@ workflow GET_CANDIDATES {
         ch_nets.map { meta, transaid, bed, netstart -> [ meta, transaid, bed ] }.set { ch_transaid }
         ch_nets.map { meta, transaid, bed, netstart -> [ meta, netstart ] }.set { ch_netstart }
 
-        JOIN_NETS( ch_transaid, ch_netstart )
+        JOIN_NETS( ch_transaid, ch_netstart, skip_netstart )
         ch_versions = ch_versions.mix(NETSTART.out.versions)
       } else {
         TRANSAID.out.transaid
           .join(RNASAMBA.out.bed)
           .set { ch_nets }
 
-        JOIN_NETS( ch_nets, Channel.value([[:], []]) )
+        JOIN_NETS( ch_nets, Channel.value([[:], []]), skip_netstart )
       }
 
       TRANSLATION.out.predictions
