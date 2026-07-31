@@ -1,3 +1,5 @@
 modules/nets/netstart2/* linguist-vendored
 modules/nets/TRANSAID/* linguist-vendored
 modules/orf/tai/* linguist-vendored
+
+*.config linguist-language=nextflow
