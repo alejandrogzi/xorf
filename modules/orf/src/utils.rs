@@ -74,12 +74,14 @@ pub fn reader<P: AsRef<Path> + Debug>(file: P) -> Result<String, Box<dyn std::er
 pub fn translate(sequence: &[u8]) -> String {
     let mut aa = String::new();
     for codon in sequence.chunks(3) {
-        let amino_acid = translate_codon(codon);
+        // INFO: codon to upper case
+        let codon = codon.to_ascii_uppercase();
+        let amino_acid = translate_codon(&codon);
 
         if amino_acid == "X" {
             println!(
                 "WARN: codon -> {:?} is not a valid codon from sequence -> {:?}!",
-                from_utf8(codon).unwrap(),
+                from_utf8(&codon).unwrap(),
                 from_utf8(sequence).unwrap()
             );
 
@@ -327,7 +329,8 @@ pub fn parse_fa<F: AsRef<Path>>(
             .iter()
             .filter(|&&b| b != b'\n' && b != b'\r') // Remove newdatas and carriage returns
             .cloned()
-            .collect::<Vec<u8>>();
+            .collect::<Vec<u8>>()
+            .to_ascii_uppercase(); // Always uppercase to avoid softmasking codon matching issues
 
         acc.insert(SmolStr::new(header), seq);
         pos = end;

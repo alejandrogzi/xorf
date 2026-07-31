@@ -4,6 +4,26 @@ All notable changes to this project are documented below.
 
 ---
 
+## [0.0.40] - 2026-07-31
+
+### Breaking Changes
+- **Soft-masking of input sequences removed**: Sequence parsing now uppercases every base at read time, so lowercase (soft-masked) input no longer slips through codon matching. Start and stop codon checks in the translation step are case-normalised before comparison, and the translation table is applied to uppercased codons. Pipelines fed with lowercase reference sequences will now produce codon-aware results instead of silently emitting `X` for otherwise valid codons.
+- **`orf` bumped to v0.0.26**: The translation component was updated to the case-normalised codon handling described above, replacing the previous soft-mask-dependent behaviour.
+- **Full-length predictions now emitted from the renaming stage**: The workflow's `files` output no longer points at the raw concatenation. When renaming is active, the emitted predictions come from the renamed, full-length set; the merged renamed files are returned only when the joined concatenation step is kept enabled. Tooling consuming the `files` output may observe different identifiers and content than in 0.0.39.
+
+### Features
+- **`--do_polishing` switch**: New parameter, enabled by default, controlling the polishing stage. When set to `false`, the duplicate-detection and truncation-stripping steps (`DETACH_DUPLICATES`, `ISOTOOLS_TRUNCATION_DETECTOR`, `STRIP_TRUNCATIONS`) are skipped entirely and the full-length predictions pass through untouched, retaining their original duplicates and truncations.
+- **`--skip_joined_concat` switch**: New parameter, disabled by default. When enabled, the joined concatenation step (`CONCAT_RENAMED` / `CONCAT_RENAMED_RAW`) is skipped, and the renamed per-region predictions are forwarded directly as the full-length set instead of being merged into a single file first.
+- **`skip_netstart` passed as an explicit input**: The `JOIN` process now receives `skip_netstart` as a dedicated argument instead of reading the global parameter directly, making the net-merging behaviour explicit per invocation and removing the last hard dependency on pipeline-level state inside the module.
+- **Graceful completion reporting**: When the pipeline completes successfully but no final BED files are found under `04_results`, the completion handler now falls back to reporting the intermediate BED files under `02_merged` before warning, so successful runs without a polished result set are no longer misreported.
+
+### Infrastructure
+- Manifest version updated to `0.0.40`.
+- `nextflow.config` extended with documented "Joining options" and "Polishing options" sections; the `test` profile enables `skip_joined_concat` and `do_polishing` alongside the existing settings.
+- Pipeline banner now credits The Hiller Lab at the Senckenberg Research Institute.
+- `.gitattributes` now tags `*.config` files as Nextflow for correct language rendering.
+- `assets/pipeline/xorf.mermaid` updated with the `BEDTOOLS_INTERSECT`, `UNMASKED_CANDIDATES`, and `PSAURON` nodes, reflecting the current pipeline topology.
+
 ## [0.0.39] - 2026-07-22
 
 ### Breaking Changes

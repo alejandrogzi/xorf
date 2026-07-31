@@ -12,9 +12,13 @@ flowchart LR
   subgraph WF[XORF pipeline]
     GENEPRED_LINT["GENEPRED_LINT"]
     GENOMEMASK_SELENO["GENOMEMASK_SELENO<br/>"]
+    BEDTOOLS_INTERSECT["BEDTOOLS_INTERSECT"]
     CHUNKER["CHUNKER"]
+    UNMASKED_CANDIDATES["UNMASKED_CANDIDATES"]
+
 
     subgraph CAND[Candidate generation]
+      PSAURON["PSAURON"]
       TRANSLATIONAI["TRANSLATIONAI"]
       RNASAMBA["RNASAMBA"]
       NETSTART["NETSTART"]
@@ -39,11 +43,16 @@ flowchart LR
   GENEPRED_LINT --> CHUNKER
   sequence -.-> GENOMEMASK_SELENO
   seleno -.-> GENOMEMASK_SELENO
+  sequence -.-> BEDTOOLS_INTERSECT
+  seleno -.-> BEDTOOLS_INTERSECT
+  BEDTOOLS_INTERSECT -.-> UNMASKED_CANDIDATES
   GENOMEMASK_SELENO -.-> CHUNKER
+  UNMASKED_CANDIDATES -.-> CHUNKER
 
   %% ---------- Chunk pairing ----------
   CHUNKER --> TRANSLATIONAI
   CHUNKER --> RNASAMBA
+  CHUNKER --> PSAURON
 
   %% ---------- Candidate generation ----------
   RNASAMBA --> NETSTART
@@ -53,6 +62,7 @@ flowchart LR
   TRANSAID --> JOIN
 
   TRANSLATIONAI --> BLAST
+  PSAURON --> BLAST
   JOIN --> BLAST
   database --> BLAST
 
@@ -74,7 +84,7 @@ flowchart LR
   classDef optional fill:#f7eefc,stroke:#805ad5,stroke-width:1px;
 
   class regions,sequence,database,seleno,weights_u,weights_l,email_in input;
-  class WGET,GENEPRED_LINT,GENOMEMASK_SELENO,CHUNKER,TRANSLATION,RNASAMBA,NETSTART,TRANSAID,JOIN,BLAST,PREDICT,CONCAT,CONCAT_RAW process;
+  class WGET,GENEPRED_LINT,GENOMEMASK_SELENO,UNMASKED_CANDIDATES,BEDTOOLS_INTERSECT,CHUNKER,TRANSLATIONAI,RNASAMBA,TRANSAID,JOIN,BLAST,PREDICT,CONCAT,CONCAT_RAW process;
   class COUNTS,VERSIONS meta;
   class EMAIL optional;
   class results,raw_results,counts_out,versions_out output;
