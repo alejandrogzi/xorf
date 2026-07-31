@@ -228,7 +228,7 @@ fn tai(
                 continue;
             }
 
-            let mut stop_codon = "";
+            let mut stop_codon = String::new();
 
             // INFO: before adding up we need to check the stop codon to see if its a real one or not
             let sequence = sequences.get(&id.to_smolstr()).unwrap_or_else(|| {
@@ -240,9 +240,9 @@ fn tai(
                 from_utf8(&sequence[start as usize..(start + 3) as usize])
                     .unwrap_or_else(|e| {
                         panic!("ERROR: failed to parse start codon -> {e} -> {sequence:?} from {id:?} using {orf_start:?}");
-                    });
+                    }).to_uppercase();
 
-            __check_start_codon(start_codon, &id, start);
+            __check_start_codon(&start_codon, &id, start);
 
             // INFO: stop is inclusive, so we add 3 to include the stop codon
             match record.strand() {
@@ -261,7 +261,7 @@ fn tai(
                             from_utf8(&sequence[(stop - 3) as usize..(stop) as usize])
                                 .unwrap_or_else(|e| {
                                     panic!("ERROR: failed to parse stop codon -> {e} -> {sequence:?} from {id:?} using {orf_end:?}");
-                                });
+                                }).to_uppercase();
                         println!("WARN: non-stop ORF stop_codon picked -> {:?}", stop_codon);
 
                         orf_sequence = sequence[start as usize..stop as usize].to_vec();
@@ -270,9 +270,9 @@ fn tai(
                             from_utf8(&sequence[(stop) as usize..(stop + 3) as usize])
                                 .unwrap_or_else(|e| {
                                     panic!("ERROR: failed to parse stop codon -> {e} -> {sequence:?} from {id:?} using {orf_end:?}");
-                                });
+                                }).to_uppercase();
 
-                        if !STOP_CODONS.contains(&stop_codon) {
+                        if !STOP_CODONS.contains(&stop_codon.as_str()) {
                             // WARN: if stop_codon is not cannonical this is probably a case where the tool is wrong
                             println!(
                                 "WARN: stop codon is not TAA, TAG, or TGA -> {:?} from {:?} using {:?}",
@@ -284,7 +284,7 @@ fn tai(
                                 from_utf8(&sequence[(stop - 3) as usize..(stop) as usize])
                                     .unwrap_or_else(|e| {
                                         panic!("ERROR: failed to parse stop codon -> {e} -> {sequence:?} from {id:?} using {orf_end:?}");
-                                    });
+                                    }).to_uppercase();
 
                             println!("WARN: non-stop ORF stop_codon picked -> {:?}", stop_codon);
                             orf_sequence = sequence[start as usize..stop as usize].to_vec();
@@ -306,7 +306,7 @@ fn tai(
                             from_utf8(&sequence[(stop - 3) as usize..(stop) as usize])
                                 .unwrap_or_else(|e| {
                                     panic!("ERROR: failed to parse stop codon -> {e} -> {sequence:?} from {id:?} using {orf_end:?}");
-                                });
+                                }).to_uppercase();
                         println!("WARN: non-stop ORF stop_codon picked -> {:?}", stop_codon);
                         orf_sequence = sequence[start as usize..stop as usize].to_vec();
                     } else {
@@ -314,9 +314,9 @@ fn tai(
                             from_utf8(&sequence[(stop) as usize..(stop + 3) as usize])
                                 .unwrap_or_else(|e| {
                                     panic!("ERROR: failed to parse stop codon -> {e} -> {sequence:?} from {id:?} using {orf_end:?}");
-                                });
+                                }).to_uppercase();
 
-                        if !STOP_CODONS.contains(&stop_codon) {
+                        if !STOP_CODONS.contains(&stop_codon.as_str()) {
                             // WARN: if stop_codon is not cannonical this is probably a case where the tool is wrong
                             println!(
                                 "WARN: stop codon is not TAA, TAG, or TGA -> {:?} from {:?} using {:?}",
@@ -328,7 +328,7 @@ fn tai(
                                 from_utf8(&sequence[(stop - 3) as usize..(stop) as usize])
                                     .unwrap_or_else(|e| {
                                         panic!("ERROR: failed to parse stop codon -> {e} -> {sequence:?} from {id:?} using {orf_end:?}");
-                                    });
+                                    }).to_uppercase();
 
                             println!("WARN: non-stop ORF stop_codon picked -> {:?}", stop_codon);
                             orf_sequence = sequence[start as usize..stop as usize].to_vec();
