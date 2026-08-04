@@ -1,0 +1,7 @@
+name: fasta-merge
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - conda-forge::gzip

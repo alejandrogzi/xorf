@@ -1,0 +1,8 @@
+name: diamond-makedb
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - bioconda::diamond==2.2.1
+  - conda-forge::gzip

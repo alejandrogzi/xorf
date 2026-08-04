@@ -3,7 +3,7 @@ Copyright (c) 2026 The Hiller Lab at the Senckenberg Gessellschaft für Naturfor
 Distributed under the terms of the GNU General Public License, Version 3.0.
 */
 
-process BEDTOOLS_INTERSECT {
+process BEDTOOLS_EXCLUDE {
     tag "${meta.id}"
     label 'process_low'
 
@@ -31,8 +31,8 @@ process BEDTOOLS_INTERSECT {
         intersect \\
         -a ${file_a} \\
         -b ${file_b} \\
-        -u \\
-        > ${prefix}.overlapping.bed
+        -v \\
+        > ${prefix}.excluded.bed
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
@@ -43,7 +43,7 @@ process BEDTOOLS_INTERSECT {
     stub:
     def prefix = task.ext.prefix ?: "${meta.id}"
     """
-    touch ${prefix}.overlapping.bed
+    touch ${prefix}.excluded.bed
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
