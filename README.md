@@ -27,7 +27,8 @@
         <br>
         <br>
         <a href="https://www.genome.gov/genetics-glossary/Open-Reading-Frame">orf</a> .
-        <a href="https://github.com/hillerlab/xorf/blob/main/assets/pipeline/xorf.mermaid">pipeline</a> .
+        <a href="https://github.com/alejandrogzi/xorf/blob/master/assets/pipeline/xorf.mermaid">pipeline</a> .
+        <a href="https://github.com/alejandrogzi/xorf/blob/master/assets/docs/usage.md">usage</a> .
         <a href="https://hillerlab.com/">us</a> 
     </samp>
   </p>
