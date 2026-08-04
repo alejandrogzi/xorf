@@ -2,11 +2,16 @@
 nextflow.enable.dsl=2
 
 // Copyright (c) 2025 Alejandro Gonzales-Irribarren <alejandrxgzi@gmail.com>
-// Distributed under the terms of the Apache License, Version 2.0.
+// Distributed under the terms of the GNU General Public License, Version 3.0.
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    XORF — Main subworkflow: chunks input, gets candidates, predicts ORFs, concatenates results
+    xorf
+
+    Main subworkflow: chunks input, gets candidates, predicts ORFs, concatenates results
+    Authors: Alejandro Gonzales-Irribarren, Michael Hiller
+
+    GitHub:  https://github.com/hillerlab/xorf
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
@@ -18,16 +23,23 @@ nextflow.enable.dsl=2
 
 include { CHUNKER }      from '../../modules/chunker/main.nf'
 include { CHUNKER as UNMASKED_CHUNKER } from '../../modules/chunker/main.nf'
+
 include { CONCAT }       from '../../modules/concat/main.nf'
 include { CONCAT as CONCAT_RAW }   from '../../modules/concat/main.nf'
 include { CONCAT as CONCAT_RENAMED }   from '../../modules/concat/main.nf'
 include { CONCAT as CONCAT_RENAMED_RAW }   from '../../modules/concat/main.nf'
+
 include { GENOMEMASK_SELENO } from '../../modules/genomemask/seleno/main.nf'
 include { GENEPRED_LINT } from '../../modules/genepred/lint/main.nf'
 include { DETACH_DUPLICATES } from '../../modules/detach/main.nf'
 include { ISOTOOLS_TRUNCATION_DETECTOR } from '../../modules/isotools/utr/main.nf'
 include { STRIP_OCCURRENCES as STRIP_TRUNCATIONS } from '../../modules/strip/main.nf'
+
 include { BEDTOOLS_INTERSECT as BEDTOOLS_INTERSECT_UNMASKED } from '../../modules/bedtools/intersect/main.nf'
+include { BEDTOOLS_INTERSECT as BEDTOOLS_INTERSECT_MASKED } from '../../modules/bedtools/intersect/main.nf'
+include { BEDTOOLS_EXCLUDE as BEDTOOLS_EXCLUDE_UNMASKED } from '../../modules/bedtools/exclude/main.nf'
+include { BEDTOOLS_EXCLUDE as BEDTOOLS_EXCLUDE_MASKED } from '../../modules/bedtools/exclude/main.nf'
+
 include { RENAME_PREDICTIONS as RENAME_PREDICTIONS_RAW } from '../../modules/rename/main.nf'
 include { RENAME_PREDICTIONS } from '../../modules/rename/main.nf'
 
@@ -54,6 +66,10 @@ workflow XORF {
       rename_deactivate    // boolean
       do_polishing         // boolean
       skip_joined_concat   // boolean
+      run_only_on          // boolean
+      run_only_mode        // string [ options: mask, unmask ]
+      run_only_target      // string [ options: intersect, exclude ]
+      database_versions    // channel: versions.yml from the protein database preparation steps
 
     main:
       def ch_regions  = regions
@@ -65,56 +81,210 @@ workflow XORF {
 
       def ch_versions = Channel.empty()
 
-      // Linting //////////////////////////////////////////////////////////
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          LINTING
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
 
       GENEPRED_LINT(
         ch_regions
       )
 
-      // Chunking /////////////////////////////////////////////////////////
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          CHUNKING OWNED CHANNELS
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
+
+      ch_masked_chunked_regions = Channel.empty()
+      ch_masked_chunked_sequences = Channel.empty()
 
       ch_unmasked_chunked_regions = Channel.empty()
       ch_unmasked_chunked_sequences = Channel.empty()
-      if (selenocysteine_sites) {
-          ch_selenocysteine_sites = Channel.fromPath(selenocysteine_sites, checkIfExists: true).map { it -> [ [id: it.baseName], it ] }
 
-          GENOMEMASK_SELENO(
-              ch_sequence.map { it -> [ [id: it.baseName], it ] },
-              ch_selenocysteine_sites
-          )
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          CHUNKING + ROUTING RUNNING MODE [ --run_only_on true/false ]
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
 
-          CHUNKER(
-              ch_regions.map { meta, file -> [ meta + [ masked: true, hash: localHash ], file ] },
-              GENOMEMASK_SELENO.out.fasta.first(),
-              chunkSize,
-          )
+      // INFO: run_only_on is able to neglect either masked/unmasked channels
+      // in order to run only on masked or unmasked sequences
+      if (run_only_on) {
+          ch_chunker_target = Channel.empty()
 
-          BEDTOOLS_INTERSECT_UNMASKED(
-              ch_regions,
-              ch_selenocysteine_sites
-          )
-          UNMASKED_CHUNKER(
-              BEDTOOLS_INTERSECT_UNMASKED.out.bed
-                .map { meta, file -> [ meta + [ chr:'UNMSK', masked: false, hash: localHash ], file ] },
-              ch_sequence.map { it -> [ [ id: it.baseName ], it ] },
-              chunkSize,
-          )
-          ch_unmasked_chunked_regions = UNMASKED_CHUNKER.out.chunked_regions
-          ch_unmasked_chunked_sequences = UNMASKED_CHUNKER.out.chunked_sequences
+          switch (run_only_mode) {
+              case 'mask':
+                if (selenocysteine_sites) {
+                  Channel.fromPath(selenocysteine_sites, checkIfExists: true)
+                    .map { it -> [ [id: it.baseName], it ] }
+                    .set { ch_selenocysteine_sites }
 
-          ch_versions = ch_versions.mix(GENOMEMASK_SELENO.out.versions)
-          ch_versions = ch_versions.mix(BEDTOOLS_INTERSECT_UNMASKED.out.versions)
+                  GENOMEMASK_SELENO(
+                      ch_sequence.map { it -> [ [id: it.baseName], it ] },
+                      ch_selenocysteine_sites
+                  )
+
+                  switch (run_only_target) {
+                      case 'intersect':
+                        BEDTOOLS_INTERSECT_MASKED(
+                            ch_regions,
+                            ch_selenocysteine_sites
+                        )
+
+                        ch_chunker_target = BEDTOOLS_INTERSECT_MASKED.out.bed
+                        ch_versions = ch_versions.mix(BEDTOOLS_INTERSECT_MASKED.out.versions)
+
+                      break
+
+                      case 'exclude':
+                        BEDTOOLS_EXCLUDE_MASKED(
+                            ch_regions,
+                            ch_selenocysteine_sites
+                        )
+
+                        ch_chunker_target = BEDTOOLS_EXCLUDE_MASKED.out.bed
+                        ch_versions = ch_versions.mix(BEDTOOLS_EXCLUDE_MASKED.out.versions)
+                      break
+
+                      default:
+                        error """
+                        ERROR: run_only_target is not recognized.
+                        Please provide a valid run_only_target: 'intersect' or 'exclude'.
+                        """.stripIndent()
+                  }
+
+                  CHUNKER(
+                      ch_chunker_target
+                        .map { meta, file -> [ meta + [ masked: true, hash: localHash ], file ] },
+                      GENOMEMASK_SELENO.out.fasta.first(),
+                      chunkSize,
+                  )
+
+                  ch_masked_chunked_regions = CHUNKER.out.chunked_regions
+                  ch_masked_chunked_sequences = CHUNKER.out.chunked_sequences
+
+                  ch_versions = ch_versions.mix(GENOMEMASK_SELENO.out.versions)
+                } else {
+                  error """
+                  ERROR: run_only_on is true but no selenocysteine_sites were provided.
+                  Please provide a selenocysteine_sites file or set run_only_on to false.
+                  """.stripIndent()
+                }
+              break
+
+              case 'unmask':
+                if (selenocysteine_sites) {
+                  switch (run_only_target) {
+                      case 'intersect':
+                        BEDTOOLS_INTERSECT_UNMASKED(
+                            ch_regions,
+                            ch_selenocysteine_sites
+                        )
+
+                        ch_chunker_target = BEDTOOLS_INTERSECT_UNMASKED.out.bed
+                        ch_versions = ch_versions.mix(BEDTOOLS_INTERSECT_UNMASKED.out.versions)
+
+                      break
+
+                      case 'exclude':
+                        BEDTOOLS_EXCLUDE_UNMASKED(
+                            ch_regions,
+                            ch_selenocysteine_sites
+                        )
+
+                        ch_chunker_target = BEDTOOLS_EXCLUDE_UNMASKED.out.bed
+                        ch_versions = ch_versions.mix(BEDTOOLS_EXCLUDE_UNMASKED.out.versions)
+                      break
+
+                      default:
+                        error """
+                        ERROR: run_only_target is not recognized.
+                        Please provide a valid run_only_target: 'intersect' or 'exclude'.
+                        """.stripIndent()
+                  }
+
+                  UNMASKED_CHUNKER(
+                      ch_chunker_target
+                        .map { meta, file -> [ meta + [ chr:'UNMSK', masked: false, hash: localHash ], file ] },
+                      ch_sequence.map { it -> [ [ id: it.baseName ], it ] },
+                      chunkSize,
+                  )
+
+                  ch_unmasked_chunked_regions = UNMASKED_CHUNKER.out.chunked_regions
+                  ch_unmasked_chunked_sequences = UNMASKED_CHUNKER.out.chunked_sequences
+
+                } else {
+                  error """
+                  ERROR: run_only_on is true but no selenocysteine_sites were provided.
+                  Please provide a selenocysteine_sites file or set run_only_on to false.
+                  """.stripIndent()
+                }
+
+              break
+
+              default:
+                error """
+                ERROR: run_only_mode is not recognized.
+                Please provide a valid run_only_mode: 'mask' or 'unmask'.
+                """.stripIndent()
+              break
+          }
       } else {
-          CHUNKER(
-              ch_regions,
-              ch_sequence.map { it -> [ [ id: it.baseName, hash: localHash ], it ] },
-              chunkSize,
-          )
+          if (selenocysteine_sites) {
+              Channel.fromPath(selenocysteine_sites, checkIfExists: true)
+                .map { it -> [ [id: it.baseName], it ] }
+                .set { ch_selenocysteine_sites }
+
+              GENOMEMASK_SELENO(
+                  ch_sequence.map { it -> [ [id: it.baseName], it ] },
+                  ch_selenocysteine_sites
+              )
+
+              CHUNKER(
+                  ch_regions.map { meta, file -> [ meta + [ masked: true, hash: localHash ], file ] },
+                  GENOMEMASK_SELENO.out.fasta.first(),
+                  chunkSize,
+              )
+
+              ch_masked_chunked_regions = CHUNKER.out.chunked_regions
+              ch_masked_chunked_sequences = CHUNKER.out.chunked_sequences
+
+              BEDTOOLS_INTERSECT_UNMASKED(
+                  ch_regions,
+                  ch_selenocysteine_sites
+              )
+              UNMASKED_CHUNKER(
+                  BEDTOOLS_INTERSECT_UNMASKED.out.bed
+                    .map { meta, file -> [ meta + [ chr:'UNMSK', masked: false, hash: localHash ], file ] },
+                  ch_sequence.map { it -> [ [ id: it.baseName ], it ] },
+                  chunkSize,
+              )
+              ch_unmasked_chunked_regions = UNMASKED_CHUNKER.out.chunked_regions
+              ch_unmasked_chunked_sequences = UNMASKED_CHUNKER.out.chunked_sequences
+
+              ch_versions = ch_versions.mix(GENOMEMASK_SELENO.out.versions)
+              ch_versions = ch_versions.mix(BEDTOOLS_INTERSECT_UNMASKED.out.versions)
+          } else {
+              CHUNKER(
+                  ch_regions,
+                  ch_sequence.map { it -> [ [ id: it.baseName, hash: localHash ], it ] },
+                  chunkSize,
+              )
+
+              ch_masked_chunked_regions = CHUNKER.out.chunked_regions
+              ch_masked_chunked_sequences = CHUNKER.out.chunked_sequences
+          }
       }
 
-      // Joining /////////////////////////////////////////////////////////
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          JOINING
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
 
-      CHUNKER.out.chunked_regions
+      ch_masked_chunked_regions
           .mix(ch_unmasked_chunked_regions)
           .flatMap { meta, region -> 
               def regions = region instanceof List ? region : [region]
@@ -122,7 +292,7 @@ workflow XORF {
                 [ meta + [ name: it.baseName ], it] }
               }
           .join(
-              CHUNKER.out.chunked_sequences
+              ch_masked_chunked_sequences
                 .mix(ch_unmasked_chunked_sequences)
                 .flatMap { meta, fasta -> 
                     def fas = fasta instanceof List ? fasta : [fasta]
@@ -132,7 +302,11 @@ workflow XORF {
           )
           .set { ch_pairs }
 
-      // Prediction ///////////////////////////////////////////////////////
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          PREDICTION
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
 
       GET_CANDIDATES(
           ch_pairs,
@@ -160,7 +334,11 @@ workflow XORF {
           }
           .set { ch_all }
 
-      // Renaming /////////////////////////////////////////////////////////
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          RENAMING
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
 
       ch_raw_renamed = Channel.empty()
       if (predict_keep_raw) {
@@ -216,13 +394,21 @@ workflow XORF {
           }
       }
       
-      // Concatenation /////////////////////////////////////////////////////
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          CONCATENATION
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
 
       CONCAT(
           ch_all
       )
 
-      // Renaming /////////////////////////////////////////////////////////
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          RENAMING
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
 
       ch_full_length_with_duplicates = Channel.empty()
       ch_full_length_predictions = Channel.empty()
@@ -281,13 +467,21 @@ workflow XORF {
       }
 
       if (do_polishing) {
-          // Duplicates ///////////////////////////////////////////////////////
+          /*
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+              DUPLICATES
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          */
 
           DETACH_DUPLICATES( ch_full_length_with_duplicates )
           ch_full_length_transcripts = DETACH_DUPLICATES.out.pass
           ch_duplicates = DETACH_DUPLICATES.out.duplicates
 
-          // Truncation ///////////////////////////////////////////////////////
+          /*
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+              TRUNCATION
+          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          */
 
           ISOTOOLS_TRUNCATION_DETECTOR(
               ch_full_length_transcripts
@@ -299,7 +493,11 @@ workflow XORF {
           )
       }
 
-      // Counts ///////////////////////////////////////////////////////////
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          COUNTS
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
 
       PREDICT_ORFS.out.counts
       .map { meta, initial, transaid, ns_td, tai, blast, samba, all, unique, kept ->
@@ -314,6 +512,7 @@ workflow XORF {
       .set { ch_counts }
 
       ch_versions = ch_versions.mix(CONCAT.out.versions)
+      ch_versions = ch_versions.mix(database_versions)
       ch_pipeline_versions = ch_versions
           .collectFile(
               name:      "xorf.versions.yml",
