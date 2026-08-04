@@ -1,10 +1,10 @@
 <p align="center">
   <p align="center">
-    <img width=100 align="center" src="./assets/figures/xorf.png" >
+    <img width=100 align="center" src="../figures/xorf.png" >
   </p>
 
   <p align="center">
-    <img width=200 align="center" src="./assets/figures/hillerlab.png" >
+    <img width=200 align="center" src="../figures/hillerlab.png" >
   </p>
 
   <span>
@@ -44,14 +44,15 @@ This guide explains how to run xorf, what every parameter does, and what you get
 back in the results folder. It is written for humans: if something is confusing,
 let us know in a [GitHub issue](https://github.com/alejandrogzi/xorf/issues).
 
-- **What is xorf?** An end-to-end pipeline that predicts open reading frames (ORFs)
-  in a genome. You give it a genome and a list of genomic regions; it returns the
-  most confident ORF predictions as BED + TSV files.
-- **How does it work?** Each region is translated and scored with several
-  independent methods — translationAI, RNASamba, NetStart2, TransAID, and
-  BLAST/DIAMOND against a protein database. A machine-learning classifier
-  (XGBoost) combines these signals, and only the ORFs that pass its confidence
-  threshold make it to the final output.
+> [!IMPORTANT]
+> - **What is xorf?** An end-to-end pipeline that predicts open reading frames (ORFs)
+>  in a genome. You give it a genome and a list of genomic regions; it returns the
+>  most confident ORF predictions as BED + TSV files.
+> - **How does it work?** Each region is translated and scored with several
+>  independent methods — translationAI, RNASamba, NetStart2, TransAID, and
+>  BLAST/DIAMOND against a protein database. A machine-learning classifier
+>  (XGBoost) combines these signals, and only the ORFs that pass its confidence
+>  threshold make it to the final output.
 
 ---
 
