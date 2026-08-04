@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Alejandro Gonzales-Irribarren <alejandrxgzi@gmail.com>
-// Distributed under the terms of the Apache License, Version 2.0.
+// Distributed under the terms of the GNU General Public License, Version 3.0.
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -49,7 +49,7 @@ process CHUNKER {
 
     stub:
     """
-    touch tmp
+    mkdir -p tmp
     touch tmp/*bed
     touch tmp/*fa
 

@@ -1,3 +1,8 @@
+/*
+Copyright (c) 2026 The Hiller Lab at the Senckenberg Gessellschaft für Naturforschung
+Distributed under the terms of the GNU General Public License, Version 3.0.
+*/
+
 process UNTAR {
     tag "${archive}"
     label 'process_single'
