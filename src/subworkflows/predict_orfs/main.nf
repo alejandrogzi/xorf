@@ -1,9 +1,14 @@
 // Copyright (c) 2025 Alejandro Gonzales-Irribarren <alejandrxgzi@gmail.com>
-// Distributed under the terms of the Apache License, Version 2.0.
+// Distributed under the terms of the GNU General Public License, Version 3.0.
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    PREDICT_ORFS — Runs PREDICT on candidates and outputs ORFs with counts
+    predict_orfs
+
+    Runs PREDICT on candidates and outputs ORFs with counts
+    Authors: Alejandro Gonzales-Irribarren, Michael Hiller
+
+    GitHub:  https://github.com/hillerlab/xorf
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
@@ -31,15 +36,39 @@ workflow PREDICT_ORFS {
       ch_versions = Channel.empty()
       ch_raw = Channel.empty()
 
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          PREDICT
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
+
       PREDICT(ch_candidates)
+
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          RAW OUTPUT
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
 
       if (predict_keep_raw) {
           PREDICT.out.raw.set { ch_raw }
       }
 
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          COUNTS
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
+
       ch_blast_counts
       .join(PREDICT.out.counts)
       .set { ch_counts }
+
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          VERSIONS
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
 
       ch_versions = ch_versions.mix(PREDICT.out.versions)
 
