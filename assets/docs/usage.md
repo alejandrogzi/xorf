@@ -56,7 +56,7 @@
 
 
 This guide explains how to run xorf, what every parameter does, and what you get
-back in the results folder. It is written for humans: if something is confusing,
+back in the results folder. If something is confusing,
 let us know in a [GitHub issue](https://github.com/alejandrogzi/xorf/issues).
 
 > [!IMPORTANT]
