@@ -1,4 +1,58 @@
-# Changelog
+<p align="center">
+  <p align="center">
+    <img width=100 align="center" src="../figures/xorf.png" >
+  </p>
+
+<p align="center">
+  <picture>
+    <source
+      media="(prefers-color-scheme: dark)"
+      srcset="../figures/hillerlab-dark.png"
+    >
+    <source
+      media="(prefers-color-scheme: light)"
+      srcset="../figures/hillerlab-light.png"
+    >
+    <img
+      width="200"
+      alt="Hiller Lab"
+      src="../figures/hillerlab-light.png"
+    >
+  </picture>
+</p>
+
+
+  <span>
+    <h1 align="center">
+        xorf
+    </h1>
+  </span>
+
+  <span>
+    <h2 align="center">
+        CHANGELOG
+    </h2>
+  </span>
+
+  <p align="center">
+    <a href="https://github.com/hillerlab/xorf" reference="_blank">
+      <img alt="GitHub License" src="https://img.shields.io/github/license/hillerlab/xorf?color=blue">
+    </a>
+  </p>
+
+  <p align="center">
+    <samp>
+        <span> The Hiller Lab at the Senckenberg Research Institute </span>
+        <br>
+        <br>
+        <a href="https://www.genome.gov/genetics-glossary/Open-Reading-Frame">orf</a> .
+        <a href="https://github.com/alejandrogzi/xorf/blob/master/assets/pipeline/xorf.mermaid">pipeline</a> .
+        <a href="https://github.com/alejandrogzi/xorf/blob/master/assets/docs/usage.md">usage</a> .
+        <a href="https://hillerlab.com/">us</a> 
+    </samp>
+  </p>
+
+</p>
 
 All notable changes to this project are documented below.
 
