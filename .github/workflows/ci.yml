@@ -1,0 +1,43 @@
+name: integrity
+
+on:
+  pull_request:
+  push:
+    branches:
+      - "**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  pipeline-integrity:
+    name: Pipeline integrity
+    runs-on: ubuntu-latest
+    env:
+      NXF_DISABLE_CHECK_LATEST: "true"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Nextflow 25
+        uses: nf-core/setup-nextflow@v1
+        with:
+          version: '25.10.0'
+
+      - name: Validate Nextflow profiles
+        run: |
+          for profile in test; do
+            nextflow config -flat . -profile "$profile" > /dev/null
+          done
+
+      - name: Run default end-to-end smoke test
+        timeout-minutes: 30
+        run: assets/scripts/e2e.sh test

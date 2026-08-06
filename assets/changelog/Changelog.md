@@ -1,8 +1,82 @@
-# Changelog
+<p align="center">
+  <p align="center">
+    <img width=100 align="center" src="../figures/xorf.png" >
+  </p>
+
+<p align="center">
+  <picture>
+    <source
+      media="(prefers-color-scheme: dark)"
+      srcset="../figures/hillerlab-dark.png"
+    >
+    <source
+      media="(prefers-color-scheme: light)"
+      srcset="../figures/hillerlab-light.png"
+    >
+    <img
+      width="200"
+      alt="Hiller Lab"
+      src="../figures/hillerlab-light.png"
+    >
+  </picture>
+</p>
+
+
+  <span>
+    <h1 align="center">
+        xorf
+    </h1>
+  </span>
+
+  <span>
+    <h2 align="center">
+        CHANGELOG
+    </h2>
+  </span>
+
+  <p align="center">
+    <a href="https://github.com/hillerlab/xorf" reference="_blank">
+      <img alt="GitHub License" src="https://img.shields.io/github/license/hillerlab/xorf?color=blue">
+    </a>
+  </p>
+
+  <p align="center">
+    <samp>
+        <span> The Hiller Lab at the Senckenberg Research Institute </span>
+        <br>
+        <br>
+        <a href="https://www.genome.gov/genetics-glossary/Open-Reading-Frame">orf</a> .
+        <a href="https://github.com/alejandrogzi/xorf/blob/master/assets/pipeline/xorf.mermaid">pipeline</a> .
+        <a href="https://github.com/alejandrogzi/xorf/blob/master/assets/docs/usage.md">usage</a> .
+        <a href="https://hillerlab.com/">us</a> 
+    </samp>
+  </p>
+
+</p>
 
 All notable changes to this project are documented below.
 
 ---
+
+## [0.0.41] - 2026-08-04
+
+### Breaking Changes
+- **`custom_database` is now interpreted by file extension**: Previously any gzipped `custom_database` file was treated as a compressed DIAMOND database, and every other file was passed through to BLAST unchanged. The pipeline now inspects the extension and routes accordingly: `.dmnd` and `.dmnd.gz` replace the default database, FASTA inputs (`.fa`, `.fasta`, `.fa.gz`, `.fasta.gz`) are treated as protein sequences to merge into the reference set, and any other extension aborts the run at startup. Runs relying on an unlisted extension will now fail fast with an explanatory message instead of silently reaching BLAST with a file it cannot use.
+
+### Features
+- **Appending custom proteins to the default database**: `custom_database` now also accepts FASTA files. When one is given, xorf downloads the raw UniProt/SwissProt sequences (see `raw_database` below), appends the custom sequences to them, and rebuilds a DIAMOND database on the fly with the new `DIAMOND_MAKEDB` step. The merged database is then used by the BLAST stage, so custom proteins — species-specific proteomes, novel isoforms, experimental sequences — are searched alongside the curated reference instead of replacing it. DIAMOND databases (`.dmnd` / `.dmnd.gz`) continue to replace the default database entirely.
+- **`raw_database` parameter**: New parameter, defaulting to the UniProt/SwissProt FASTA download, that controls which raw sequences custom FASTA files are appended to. Point it at your own source (for example the full UniProt release instead of SwissProt) to change the reference set.
+- **`--run_only_on`, `--run_only_mode`, `--run_only_target`**: The selenocysteine masking step has always produced two prediction branches — one on the masked genome and one on the original genome. These parameters restrict the run to a single branch. `run_only_on` switches the restriction on, `run_only_mode` selects the branch (`mask` or `unmask`), and `run_only_target` selects which regions to keep (`intersect`, only regions overlapping selenocysteine sites, or `exclude`, only regions that do not). Invalid combinations — `run_only_on` without a `selenocysteine_sites` file, or an unrecognised mode or target — stop the pipeline with a clear error instead of silently misbehaving. The default (`run_only_on: false`) is unchanged: both branches are predicted.
+- **User documentation**: A new `assets/docs/usage.md` guide covers quick-start recipes (params file, command line, smoke test), every parameter grouped by purpose, the output layout and `counts.tsv` columns, profiles, running on SLURM clusters via `assets/hpc/xorf.sh`, and a FAQ.
+
+### Infrastructure
+- New modules: `DIAMOND_MAKEDB` (`src/modules/diamond/makedb/`) builds DIAMOND databases from FASTA, handling gzipped input and optional taxonomy files; `FASTA_MERGE` (`src/modules/diamond/merge/`) concatenates the raw and custom FASTA files, decompressing gzipped inputs; `BEDTOOLS_EXCLUDE` (`src/modules/bedtools/exclude/`) provides the region exclusion used by `run_only_target`, complementing the existing `BEDTOOLS_INTERSECT`.
+- The `XORF` subworkflow now routes chunks through explicit masked and unmasked channels, instantiating `BEDTOOLS_INTERSECT` and `BEDTOOLS_EXCLUDE` separately for each branch (`BEDTOOLS_INTERSECT_MASKED`, `BEDTOOLS_INTERSECT_UNMASKED`, `BEDTOOLS_EXCLUDE_MASKED`, `BEDTOOLS_EXCLUDE_UNMASKED`).
+- Database-preparation step versions (`FASTA_MERGE`, `DIAMOND_MAKEDB`) are now recorded in `xorf.versions.yml`.
+- All module and subworkflow license headers were switched from Apache-2.0 to GPL-3.0, and the modules that previously carried no header at all (`bedtools/intersect`, `detach`, `gunzip`, `rename`, `strip`, `untar`) received new Hiller Lab copyright blocks.
+- The `CHUNKER` stub was fixed to create its scratch directory with `mkdir -p`, so stub runs (`-stub-run`) no longer fail on the chunking step.
+- The help output and run banner now document the `run_only_*` parameters and the `custom_database` extension behaviour, and `params.json` was extended with the new parameters.
+- `README.md` now links the usage guide; manifest version updated to `0.0.41`.
 
 ## [0.0.40] - 2026-07-31
 

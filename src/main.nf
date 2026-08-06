@@ -46,13 +46,19 @@ if (params.help) {
 
     Optional parameters (common):
         --outdir              PATH    Output directory [default: ./results]
-        --custom_database     PATH    Path to custom protein database (.dmnd) [default: null]
+        --custom_database     PATH    Path to custom database [default: null]:
+                                      .dmnd/.dmnd.gz replaces the default database;
+                                      .fa/.fasta/.fa.gz/.fasta.gz is appended to the default SwissProt database
+        --raw_database        URL     Raw protein sequences used when custom_database is a FASTA [default: UniProt/SwissProt]
         --chunk_size          INT     Chunk size for parallel processing [default: 20]
         --predict_keep_raw    BOOL      Keep raw predictions [default: false]
         --selenocysteine_sites PATH      Selenocysteine masking [default: null]
         --predict_min_score_max_predictions FLOAT   Minimum score for ORF predictions [default: 0.50]
         --predict_max_predictions INT  Maximum number of ORF predictions [default: 3]
         --skip_netstart       BOOL      Skip netstart [default: false]
+        --run_only_on         BOOL      Run only on masked or unmasked sequences [default: false]
+        --run_only_mode       STRING    Run only on masked or unmasked sequences [default: null; options: mask, unmask]
+        --run_only_target     STRING    Run only on masked or unmasked sequences [default: null; options: intersect, exclude]
 
     Profiles:
         local       Run on local machine (default)
@@ -80,6 +86,8 @@ include { WGET as WGET_SAMBA_WEIGHTS } from './modules/wget/main.nf'
 include { UNTAR } from './modules/untar/main.nf'
 include { WGET as WGET_PROTEIN_DATABASE } from './modules/wget/main.nf'
 include { GUNZIP as GUNZIP_DATABASE } from './modules/gunzip/main.nf'
+include { FASTA_MERGE } from './modules/diamond/merge/main.nf'
+include { DIAMOND_MAKEDB } from './modules/diamond/makedb/main.nf'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -166,10 +174,23 @@ workflow XORF {
       Sequence:  ${params.sequence}
       Database:  ${params.database} (custom: ${params.custom_database})
       Outdir:    ${params.outdir}
+      Run only:  ${params.run_only_on} (mode: ${params.run_only_mode}, target: ${params.run_only_target})
       Profile:   ${workflow.profile}
     """.stripIndent()
 
+    /*
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        VALIDATE INPUTS
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    */
+
     validateRun()
+
+    /*
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        SAMBA WEIGHTS
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    */
 
     ch_samba_weights = Channel.empty()
     if (params.samba_local_weights) {
@@ -185,9 +206,19 @@ workflow XORF {
         ch_samba_weights = WGET_SAMBA_WEIGHTS.out.outfile
     }
 
+    /*
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        PROTEIN DATABASE
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    */
+
     ch_database = Channel.empty()
+    ch_database_versions = Channel.empty()
     if (params.custom_database) {
-      if (params.custom_database.endsWith('.gz')) {
+      // INFO: .dmnd / .dmnd.gz -> replaces the default database entirely
+      if (params.custom_database.endsWith('.dmnd')) {
+          ch_database = Channel.fromPath(params.custom_database, checkIfExists: true)
+      } else if (params.custom_database.endsWith('.dmnd.gz')) {
           GUNZIP_DATABASE(
               Channel.value(
                   [ [id: params.custom_database.tokenize('/')[-1]], params.custom_database ]
@@ -196,8 +227,36 @@ workflow XORF {
           GUNZIP_DATABASE.out.gunzip
             .map { meta, it -> it }
             .set { ch_database }
+      // INFO: .fa / .fasta / .fa.gz / .fasta.gz -> downloaded raw database + custom
+      // sequences are merged, then reindexed with DIAMOND_MAKEDB
+      } else if (params.custom_database.endsWith('.fa') || params.custom_database.endsWith('.fasta')
+                  || params.custom_database.endsWith('.fa.gz') || params.custom_database.endsWith('.fasta.gz')) {
+          WGET_PROTEIN_DATABASE(
+              Channel.value(params.raw_database)
+              .map { it -> [ [ id: 'uniprot_sprot.fasta.gz' ], it ] }
+          )
+          FASTA_MERGE(
+              Channel.fromPath(params.custom_database, checkIfExists: true)
+                .map { it -> [ [ id: it.baseName ], it ] }
+                .combine(WGET_PROTEIN_DATABASE.out.outfile.map { meta, raw -> raw })
+          )
+          DIAMOND_MAKEDB(
+              FASTA_MERGE.out.fasta.map { meta, fasta -> [ [ id: 'merged_database' ], fasta ] },
+              [],
+              [],
+              []
+          )
+          DIAMOND_MAKEDB.out.db
+            .map { meta, it -> it }
+            .set { ch_database }
+          ch_database_versions = FASTA_MERGE.out.versions.mix(DIAMOND_MAKEDB.out.versions)
       } else {
-          ch_database = Channel.fromPath(params.custom_database)
+          error """
+          ERROR: custom_database extension not recognized.
+          Please provide a custom database in one of these formats:
+            .dmnd/.dmnd.gz   -> replaces the default database entirely
+            .fa/.fasta/.fa.gz/.fasta.gz -> appended to the default SwissProt database and reindexed
+          """.stripIndent()
       }
     } else {
       WGET_PROTEIN_DATABASE(
@@ -207,6 +266,12 @@ workflow XORF {
       UNTAR(WGET_PROTEIN_DATABASE.out.outfile)
       ch_database = UNTAR.out.contents.map { meta, it -> it }
     }
+
+    /*
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        MAIN WORKFLOW
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    */
 
     MAIN (
        Channel.fromPath(params.regions).map { it -> [ [id: it.baseName, chr: randomHash()], it ] },
@@ -220,8 +285,18 @@ workflow XORF {
        params.skip_netstart,
        params.rename_deactivate,
        params.do_polishing,
-       params.skip_joined_concat
+       params.skip_joined_concat,
+       params.run_only_on,
+       params.run_only_mode,
+       params.run_only_target,
+       ch_database_versions
     )
+
+    /*
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        PIPELINE COMPLETION
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    */
 
     PIPELINE_COMPLETION (
         params.email_to,

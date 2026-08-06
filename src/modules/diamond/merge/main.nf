@@ -3,8 +3,8 @@ Copyright (c) 2026 The Hiller Lab at the Senckenberg Gessellschaft für Naturfor
 Distributed under the terms of the GNU General Public License, Version 3.0.
 */
 
-process GUNZIP {
-    tag "$archive"
+process FASTA_MERGE {
+    tag "${meta.id}"
     label 'process_single'
 
     conda "${moduleDir}/environment.yml"
@@ -13,39 +13,40 @@ process GUNZIP {
         'community.wave.seqera.io/library/coreutils_grep_gzip_lbzip2_pruned:838ba80435a629f8' }"
 
     input:
-    tuple val(meta), path(archive)
+    tuple val(meta), path(custom), path(raw)
 
     output:
-    tuple val(meta), path("$gunzip"), emit: gunzip
-    path "versions.yml"             , emit: versions
+    tuple val(meta), path("${prefix}.fa"), emit: fasta
+    path "versions.yml"                  , emit: versions
 
     when:
     task.ext.when == null || task.ext.when
 
     script:
-    def args = task.ext.args ?: ''
-    gunzip = task.ext.prefix ?: archive.toString() - '.gz'
+    prefix = task.ext.prefix ?: 'merged'
+    def custom_is_gz = custom.toString().endsWith('.gz')
+    def raw_is_gz = raw.toString().endsWith('.gz')
     """
-    gunzip \\
-        -c \\
-        $args \\
-        "$archive" \\
-        > "$gunzip"
+    ${custom_is_gz ? "gzip -c -d ${custom}" : "cat ${custom}"} > custom.fa
+    ${raw_is_gz ? "gzip -c -d ${raw}" : "cat ${raw}"} > raw.fa
+    cat raw.fa custom.fa > ${prefix}.fa
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
+        cat: \$(cat --version 2>&1 | head -n 1 | sed 's/cat (GNU coreutils) //' )
         gzip: \$(gzip --version | head -n1 | sed 's/^.* //')
     END_VERSIONS
     """
 
     stub:
-    gunzip = task.ext.prefix ?: archive.toString() - '.gz'
+    prefix = task.ext.prefix ?: 'merged'
     """
-    touch $gunzip
+    touch ${prefix}.fa
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        gzip: "stub"
+        cat: \$(cat --version 2>&1 | head -n 1 | sed 's/cat (GNU coreutils) //' )
+        gzip: \$(gzip --version | head -n1 | sed 's/^.* //')
     END_VERSIONS
     """
 }

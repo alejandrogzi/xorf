@@ -1,9 +1,14 @@
 // Copyright (c) 2025 Alejandro Gonzales-Irribarren <alejandrxgzi@gmail.com>
-// Distributed under the terms of the Apache License, Version 2.0.
+// Distributed under the terms of the GNU General Public License, Version 3.0.
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    GET_CANDIDATES — Runs translation, RNASamba, NetStart, TransAID, BLAST to get ORF candidates
+    candidates
+
+    Runs translation, RNASamba, NetStart, TransAID, BLAST to get ORF candidates
+    Authors: Alejandro Gonzales-Irribarren, Michael Hiller
+
+    GitHub:  https://github.com/hillerlab/xorf
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
@@ -37,7 +42,19 @@ workflow GET_CANDIDATES {
     main:
       ch_versions = Channel.empty()
 
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          TRANSLATION
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
+
       TRANSLATION(ch_pairs)
+
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          RNASAMBA & TRANSAID
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
 
       RNASAMBA(
         ch_pairs,
@@ -79,6 +96,12 @@ workflow GET_CANDIDATES {
       .join(JOIN_NETS.out.net)
       .set { ch_pre_candidates }
 
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          BLAST
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
+
       // INFO: BLAST.out.blast is a channel of [meta, bed, tsv]
       // INFO: RNASAMBA.out.samba is a channel of [meta, tsv]
       BLAST(
@@ -89,10 +112,22 @@ workflow GET_CANDIDATES {
       .join(RNASAMBA.out.samba)
       .set { ch_candidates }
 
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          COUNTS
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
+
       BLAST.out.counts
       .join(TRANSAID.out.count)
       .join(JOIN_NETS.out.count)
       .set { ch_counts }
+
+      /*
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+          VERSIONS
+      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      */
 
       ch_versions = ch_versions.mix(TRANSLATION.out.versions)
       ch_versions = ch_versions.mix(RNASAMBA.out.versions)
