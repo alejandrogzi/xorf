@@ -12,7 +12,7 @@ process PREDICT {
     label 'process_single'
 
     conda "${moduleDir}/environment.yml"
-    container 'ghcr.io/alejandrogzi/orf-predict:latest'
+    container 'ghcr.io/hillerlab/orf-predict:latest'
 
     input:
     tuple val(meta), path(bed), path(blast), path(samba)

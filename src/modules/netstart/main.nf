@@ -12,7 +12,7 @@ process NETSTART {
     label 'process_single'
 
     conda "${moduleDir}/environment.yml"
-    container 'ghcr.io/alejandrogzi/orf-net:latest'
+    container 'ghcr.io/hillerlab/orf-net:latest'
 
     input:
     tuple val(meta), path(sequence)

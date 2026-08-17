@@ -12,7 +12,7 @@ process RNASAMBA {
     label 'process_single'
 
     conda "${moduleDir}/environment.yml"
-    container 'ghcr.io/alejandrogzi/orf-samba:latest'
+    container 'ghcr.io/hillerlab/orf-samba:latest'
 
     input:
     tuple val(meta), path(bed), path(sequence)

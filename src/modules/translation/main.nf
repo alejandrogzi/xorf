@@ -12,7 +12,7 @@ process TRANSLATION {
     label 'process_single'
 
     conda "${moduleDir}/environment.yml"
-    container 'ghcr.io/alejandrogzi/orf-tai:latest'
+    container 'ghcr.io/hillerlab/orf-tai:latest'
 
     input:
     tuple val(meta), path(bed), path(sequence)
