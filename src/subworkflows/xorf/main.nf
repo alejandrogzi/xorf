@@ -103,6 +103,9 @@ workflow XORF {
       ch_unmasked_chunked_regions = Channel.empty()
       ch_unmasked_chunked_sequences = Channel.empty()
 
+      ch_rescue_chunked_regions = Channel.empty()
+      ch_rescue_chunked_sequences = Channel.empty()
+
       /*
       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
           CHUNKING + ROUTING RUNNING MODE [ --run_only_on true/false ]
@@ -165,6 +168,11 @@ workflow XORF {
                   ch_masked_chunked_regions = CHUNKER.out.chunked_regions
                   ch_masked_chunked_sequences = CHUNKER.out.chunked_sequences
 
+                  ch_rescue_chunked_regions = CHUNKER.out.rescue_regions
+                    .map { meta, file -> [ meta + [ upstream: 0, downstream: 0 ], file ] }
+                  ch_rescue_chunked_sequences = CHUNKER.out.rescue_sequences
+                    .map { meta, file -> [ meta + [ upstream: 0, downstream: 0 ], file ] }
+
                   ch_versions = ch_versions.mix(GENOMEMASK_SELENO.out.versions)
                 } else {
                   error """
@@ -215,6 +223,11 @@ workflow XORF {
                   ch_unmasked_chunked_regions = UNMASKED_CHUNKER.out.chunked_regions
                   ch_unmasked_chunked_sequences = UNMASKED_CHUNKER.out.chunked_sequences
 
+                  ch_rescue_chunked_regions = UNMASKED_CHUNKER.out.rescue_regions
+                    .map { meta, file -> [ meta + [ upstream: 0, downstream: 0 ], file ] }
+                  ch_rescue_chunked_sequences = UNMASKED_CHUNKER.out.rescue_sequences
+                    .map { meta, file -> [ meta + [ upstream: 0, downstream: 0 ], file ] }
+
                 } else {
                   error """
                   ERROR: run_only_on is true but no selenocysteine_sites were provided.
@@ -264,6 +277,13 @@ workflow XORF {
               ch_unmasked_chunked_regions = UNMASKED_CHUNKER.out.chunked_regions
               ch_unmasked_chunked_sequences = UNMASKED_CHUNKER.out.chunked_sequences
 
+              ch_rescue_chunked_regions = CHUNKER.out.rescue_regions
+                .mix(UNMASKED_CHUNKER.out.rescue_regions)
+                .map { meta, file -> [ meta + [ upstream: 0, downstream: 0 ], file ] }
+              ch_rescue_chunked_sequences = CHUNKER.out.rescue_sequences
+                .mix(UNMASKED_CHUNKER.out.rescue_sequences)
+                .map { meta, file -> [ meta + [ upstream: 0, downstream: 0 ], file ] }
+
               ch_versions = ch_versions.mix(GENOMEMASK_SELENO.out.versions)
               ch_versions = ch_versions.mix(BEDTOOLS_INTERSECT_UNMASKED.out.versions)
           } else {
@@ -275,6 +295,11 @@ workflow XORF {
 
               ch_masked_chunked_regions = CHUNKER.out.chunked_regions
               ch_masked_chunked_sequences = CHUNKER.out.chunked_sequences
+
+              ch_rescue_chunked_regions = CHUNKER.out.rescue_regions
+                .map { meta, file -> [ meta + [ upstream: 0, downstream: 0 ], file ] }
+              ch_rescue_chunked_sequences = CHUNKER.out.rescue_sequences
+                .map { meta, file -> [ meta + [ upstream: 0, downstream: 0 ], file ] }
           }
       }
 
@@ -286,6 +311,7 @@ workflow XORF {
 
       ch_masked_chunked_regions
           .mix(ch_unmasked_chunked_regions)
+          .mix(ch_rescue_chunked_regions)
           .flatMap { meta, region -> 
               def regions = region instanceof List ? region : [region]
               regions.collect { it ->
@@ -294,6 +320,7 @@ workflow XORF {
           .join(
               ch_masked_chunked_sequences
                 .mix(ch_unmasked_chunked_sequences)
+                .mix(ch_rescue_chunked_sequences)
                 .flatMap { meta, fasta -> 
                     def fas = fasta instanceof List ? fasta : [fasta]
                     fas.collect { it ->

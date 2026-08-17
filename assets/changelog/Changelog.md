@@ -58,6 +58,17 @@ All notable changes to this project are documented below.
 
 ---
 
+## [0.0.42] - 2026-08-17
+
+### Features
+- **Flank rescue for transcripts at sequence edges**: Transcripts whose flanking context cannot be extracted — because they sit within 1000 bp of a chromosome start or end, as happens routinely on unplaced scaffolds — were previously discarded before reaching translationAI. They are now rescued: the chunker retries extraction with 0 bp flanks and routes them through a dedicated rescue branch (tagged `upstream: 0`, `downstream: 0`) into the same candidate, prediction and polishing pipeline as regular transcripts. Flank-aware modules (`TRANSLATION`, `RNASAMBA`, `BLAST`) now read their flanks from the record metadata instead of a single process-wide value, so rescued transcripts are translated, classified and BLASTed without flank-dependent coordinate remapping. The `orf` chunker reports a `WARN` for every rescued record.
+
+### Infrastructure
+- The `CHUNKER` process emits two new optional outputs, `rescue_regions` and `rescue_sequences`, for records extracted with 0 bp flanks (written under `tmp/rescue/`), and the `XORF` subworkflow mixes them into `ch_pairs` in every run mode (plain, seleno, `run_only_on` mask/unmask).
+- The `RNASAMBA` module no longer assumes a flank-stripped FASTA always exists: when flanks are 0 the input sequence is copied into place instead of failing the `mv`.
+- The `orf` chunker gained unit tests covering flank underflow and out-of-bounds extraction with and without rescue.
+- Manifest version updated to `0.0.42`.
+
 ## [0.0.41] - 2026-08-04
 
 ### Breaking Changes

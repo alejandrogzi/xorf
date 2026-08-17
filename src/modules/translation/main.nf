@@ -25,8 +25,8 @@ process TRANSLATION {
     task.ext.when == null || task.ext.when
 
     script:
-    def upstream = task.ext.upstream ?: 1000
-    def downstream = task.ext.downstream ?: 1000
+    def upstream = meta.upstream == null ? task.ext.upstream ?: 1000 : meta.upstream
+    def downstream = meta.downstream == null ? task.ext.downstream ?: 1000 : meta.downstream
     def prefix = task.ext.prefix ?: "${meta.id}_${meta.name}"
     """
     orf tai \\

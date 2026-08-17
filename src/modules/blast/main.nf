@@ -30,8 +30,8 @@ process BLAST {
     def args = task.ext.args ?: ''
     def orf_min_len = task.ext.orf_min_len ?: 50
     def orf_min_percent = task.ext.orf_min_percent ?: 0.25
-    def upstream = task.ext.upstream ?: 1000
-    def downstream = task.ext.downstream ?: 1000
+    def upstream = meta.upstream == null ? task.ext.upstream ?: 1000 : meta.upstream
+    def downstream = meta.downstream == null ? task.ext.downstream ?: 1000 : meta.downstream
     def keep_temp = task.ext.keep_temp ? "--keep-temp" : ""
 
     def prefix = task.ext.prefix ?: "${meta.id}_${meta.name}"
