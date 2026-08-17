@@ -170,6 +170,14 @@ fn write_chunk(
     let mut f_writer =
         BufWriter::new(File::create(tmp.with_extension("fa")).unwrap_or_else(|e| panic!("{}", e)));
 
+    let rescue_dir = outdir.join("rescue");
+    let rescue_bed_path = rescue_dir.join(tmp.file_name().unwrap());
+    let rescue_fa_path = rescue_bed_path.with_extension("fa");
+
+    // INFO: lazily created only if at least one record needs a flank rescue
+    let mut rescue_writer: Option<BufWriter<File>> = None;
+    let mut rescue_f_writer: Option<BufWriter<File>> = None;
+
     chunk
         .into_iter()
         .filter_map(|result| match result {
@@ -195,47 +203,34 @@ fn write_chunk(
                 ignore_errors,
             );
 
-            if let Some(mut target) = target {
-                match &record.strand {
-                    Some(Strand::Forward) => {}
-                    Some(Strand::Reverse) => {
-                        target.reverse();
+            match target {
+                Some(target) => write_record(&record, target, &mut writer, &mut f_writer),
+                None => {
+                    // INFO: rescue: flanks could not be extracted, retry with 0 bp flanks
+                    if let Some(target) = extract_seq(&record, seq, 0, 0, ignore_errors) {
+                        eprintln!(
+                            "WARN: flanks out of bounds, rescuing record {} with 0 bp flanks",
+                            record
+                        );
 
-                        for base in target.iter_mut() {
-                            *base = match *base {
-                                b'A' => b'T',
-                                b'C' => b'G',
-                                b'G' => b'C',
-                                b'T' => b'A',
-                                b'N' => b'N',
-                                b'a' => b't',
-                                b'c' => b'g',
-                                b'g' => b'c',
-                                b't' => b'a',
-                                b'n' => b'n',
-                                _ => panic!("ERROR: Invalid base"),
-                            }
+                        if rescue_writer.is_none() {
+                            create_dir_all(&rescue_dir).unwrap_or_else(|e| panic!("{}", e));
+                            rescue_writer = Some(BufWriter::new(
+                                File::create(&rescue_bed_path).unwrap_or_else(|e| panic!("{}", e)),
+                            ));
+                            rescue_f_writer = Some(BufWriter::new(
+                                File::create(&rescue_fa_path).unwrap_or_else(|e| panic!("{}", e)),
+                            ));
                         }
+
+                        write_record(
+                            &record,
+                            target,
+                            rescue_writer.as_mut().unwrap(),
+                            rescue_f_writer.as_mut().unwrap(),
+                        );
                     }
-                    Some(Strand::Unknown) | None => {}
                 }
-
-                Writer::<Bed12>::from_record(&record, &mut writer)
-                    .unwrap_or_else(|e| panic!("ERROR: Cannot write record to file: {}", e));
-
-                f_writer.write_all(b">").unwrap_or_else(|e| panic!("{}", e));
-                f_writer
-                    .write_all(record.name().unwrap())
-                    .unwrap_or_else(|e| panic!("{}", e));
-                f_writer
-                    .write_all(b"\n")
-                    .unwrap_or_else(|e| panic!("{}", e));
-                f_writer
-                    .write_all(&target)
-                    .unwrap_or_else(|e| panic!("{}", e));
-                f_writer
-                    .write_all(b"\n")
-                    .unwrap_or_else(|e| panic!("{}", e));
             }
         });
 
@@ -250,6 +245,72 @@ fn write_chunk(
         std::fs::remove_file(&bed_path).unwrap_or_else(|e| panic!("{}", e));
         std::fs::remove_file(bed_path.with_extension("fa")).unwrap_or_else(|e| panic!("{}", e));
     }
+
+    if let Some(mut r_writer) = rescue_writer {
+        r_writer.flush().unwrap_or_else(|e| panic!("{}", e));
+        if let Some(mut r_f_writer) = rescue_f_writer {
+            r_f_writer.flush().unwrap_or_else(|e| panic!("{}", e));
+        }
+
+        let rescue_len = std::fs::metadata(&rescue_bed_path)
+            .map(|m| m.len())
+            .unwrap_or(0);
+        if rescue_len == 0 {
+            std::fs::remove_file(&rescue_bed_path).unwrap_or_else(|e| panic!("{}", e));
+            std::fs::remove_file(&rescue_fa_path).unwrap_or_else(|e| panic!("{}", e));
+            std::fs::remove_dir(&rescue_dir).unwrap_or_else(|e| panic!("{}", e));
+        }
+    }
+}
+
+/// Writes a record and its extracted sequence to the BED and FASTA writers,
+/// reverse-complementing the sequence for genes on the reverse strand.
+fn write_record<W: Write, F: Write>(
+    record: &GenePred,
+    mut target: Vec<u8>,
+    writer: &mut W,
+    f_writer: &mut F,
+) {
+    match &record.strand {
+        Some(Strand::Forward) => {}
+        Some(Strand::Reverse) => {
+            target.reverse();
+
+            for base in target.iter_mut() {
+                *base = match *base {
+                    b'A' => b'T',
+                    b'C' => b'G',
+                    b'G' => b'C',
+                    b'T' => b'A',
+                    b'N' => b'N',
+                    b'a' => b't',
+                    b'c' => b'g',
+                    b'g' => b'c',
+                    b't' => b'a',
+                    b'n' => b'n',
+                    _ => panic!("ERROR: Invalid base"),
+                }
+            }
+        }
+        Some(Strand::Unknown) | None => {}
+    }
+
+    Writer::<Bed12>::from_record(record, writer)
+        .unwrap_or_else(|e| panic!("ERROR: Cannot write record to file: {}", e));
+
+    f_writer.write_all(b">").unwrap_or_else(|e| panic!("{}", e));
+    f_writer
+        .write_all(record.name().unwrap())
+        .unwrap_or_else(|e| panic!("{}", e));
+    f_writer
+        .write_all(b"\n")
+        .unwrap_or_else(|e| panic!("{}", e));
+    f_writer
+        .write_all(&target)
+        .unwrap_or_else(|e| panic!("{}", e));
+    f_writer
+        .write_all(b"\n")
+        .unwrap_or_else(|e| panic!("{}", e));
 }
 
 #[derive(Debug)]
@@ -628,4 +689,55 @@ pub fn from_fa<F: AsRef<Path> + Debug>(f: F) -> HashMap<Vec<u8>, Vec<u8>> {
     }
 
     acc
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn record_from_bed12(data: String) -> GenePred {
+        let mut reader: Reader<Bed12> = Reader::from_reader(std::io::Cursor::new(data)).unwrap();
+        reader.next().unwrap().unwrap()
+    }
+
+    #[test]
+    fn test_extract_seq_flank_underflow_rescued_with_zero_flanks() {
+        // INFO: transcript close to the chromosome start so the 1000 bp
+        // upstream flank underflows and extraction fails
+        let record =
+            record_from_bed12("chr1\t100\t500\ttx1\t0\t+\t100\t500\t0,0,0\t1\t400\t0".to_string());
+
+        let seq = vec![b'N'; 1000];
+
+        assert!(extract_seq(&record, &seq, 1000, 1000, true).is_none());
+
+        let rescued = extract_seq(&record, &seq, 0, 0, true).unwrap();
+        assert_eq!(rescued.len(), 400);
+    }
+
+    #[test]
+    fn test_extract_seq_flank_out_of_bounds_rescued_with_zero_flanks() {
+        // INFO: transcript close to the chromosome end so the 1000 bp
+        // downstream flank exceeds the sequence length
+        let record =
+            record_from_bed12("chr1\t900\t1000\ttx2\t0\t+\t900\t1000\t0,0,0\t1\t100\t0".to_string());
+
+        let seq = vec![b'N'; 1000];
+
+        assert!(extract_seq(&record, &seq, 1000, 1000, true).is_none());
+
+        let rescued = extract_seq(&record, &seq, 0, 0, true).unwrap();
+        assert_eq!(rescued.len(), 100);
+    }
+
+    #[test]
+    fn test_extract_seq_with_flanks() {
+        let record =
+            record_from_bed12("chr1\t1100\t1500\ttx3\t0\t+\t1100\t1500\t0,0,0\t1\t400\t0".to_string());
+
+        let seq = vec![b'N'; 10000];
+
+        let extracted = extract_seq(&record, &seq, 1000, 1000, true).unwrap();
+        assert_eq!(extracted.len(), 2400);
+    }
 }

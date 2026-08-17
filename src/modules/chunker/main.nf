@@ -22,6 +22,8 @@ process CHUNKER {
     output:
     tuple val(meta), path('tmp/*bed'),     optional: true, emit: chunked_regions
     tuple val(meta), path('tmp/*fa'),      optional: true, emit: chunked_sequences
+    tuple val(meta), path('tmp/rescue/*bed'), optional: true, emit: rescue_regions
+    tuple val(meta), path('tmp/rescue/*fa'),  optional: true, emit: rescue_sequences
     path "versions.yml",  emit: versions
 
     when:
@@ -52,6 +54,9 @@ process CHUNKER {
     mkdir -p tmp
     touch tmp/*bed
     touch tmp/*fa
+    mkdir -p tmp/rescue
+    touch tmp/rescue/*bed
+    touch tmp/rescue/*fa
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":

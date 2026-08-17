@@ -29,8 +29,8 @@ process RNASAMBA {
 
     script:
     def args = task.ext.args ?: ''
-    def upstream = task.ext.upstream ?: 1000
-    def downstream = task.ext.downstream ?: 1000
+    def upstream = meta.upstream == null ? task.ext.upstream ?: 1000 : meta.upstream
+    def downstream = meta.downstream == null ? task.ext.downstream ?: 1000 : meta.downstream
     def prefix = task.ext.prefix ?: "${meta.id}_${meta.name}"
     """
     orf samba \\
@@ -42,6 +42,7 @@ process RNASAMBA {
     $args
 
     mv ${prefix}/samba/*tsv ${prefix}/${prefix}.${meta.name}.samba.tsv && rm -rf ${prefix}/samba
+    [ -f ${meta.name}.tmp.strip.fa ] || cp $sequence ${meta.name}.tmp.strip.fa
     mv ${meta.name}.tmp.strip.fa ${prefix}/${prefix}.${meta.name}.strip.fa 
 
     cat <<-END_VERSIONS > versions.yml
