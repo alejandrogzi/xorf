@@ -58,6 +58,14 @@ All notable changes to this project are documented below.
 
 ---
 
+## [0.0.43] - 2026-08-18
+
+### Fixes
+- The `orf` module no longer panics when the PSAURON predictions file is missing or empty: `read_psauron` returns an empty prediction map and logs a `WARN` instead of aborting the run. Module version bumped to `0.0.27`.
+
+### Infrastructure
+- Manifest updated: pipeline version `0.0.43`, and `name`/`homePage` now point to `hillerlab/xorf`.
+
 ## [0.0.42] - 2026-08-17
 
 ### Features

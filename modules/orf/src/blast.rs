@@ -333,8 +333,8 @@ fn __run_diamond_and_psauron(
 /// let psauron = read_psauron(psauron).unwrap();
 /// ```
 pub fn read_psauron<P: AsRef<Path> + std::fmt::Debug>(psauron: P) -> HashMap<usize, f32> {
-    let predictions = reader(psauron)
-        .unwrap_or_else(|e| panic!("ERROR: failed to read blast predictions file -> {e}"));
+    let predictions = reader(&psauron).unwrap_or_default();
+    // .unwrap_or_else(|e| panic!("ERROR: failed to read blast predictions file -> {e}"));
 
     let mut accumulator = HashMap::new();
 
@@ -344,9 +344,14 @@ pub fn read_psauron<P: AsRef<Path> + std::fmt::Debug>(psauron: P) -> HashMap<usi
     // description,psauron_is_protein,in-frame_score
     // 64,True,0.99869
     // 19,True,0.99216
-    for line in predictions.lines().skip(3) {
-        let record = PsauronRecord::parse(line);
-        accumulator.insert(record.u_id, record.psauron_score);
+    if predictions.is_empty() {
+        log::warn!("WARN: no predictions found for PSAURON in {psauron:?}");
+        return accumulator;
+    } else {
+        for line in predictions.lines().skip(3) {
+            let record = PsauronRecord::parse(line);
+            accumulator.insert(record.u_id, record.psauron_score);
+        }
     }
 
     accumulator
