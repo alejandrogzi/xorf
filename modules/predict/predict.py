@@ -3,7 +3,7 @@
 __author__ = "Alejandro Gonzales-Irribarren"
 __email__ = "alejandrxgzi@gmail.com"
 __github__ = "https://github.com/alejandrogzi"
-__version__ = "0.0.20"
+__version__ = "0.0.21"
 
 import argparse
 import logging
@@ -333,6 +333,18 @@ def run(args: argparse.Namespace) -> None:
     log.info(f"INFO: Number of features: {model.n_features_in_}")
 
     table = predict(args.blast, args.samba, model, threshold=args.threshold)
+
+    if len(table) == 0:
+        log.info(f"INFO: No predictions found in {args.blast}/{args.samba}, will not map to blocks!")
+        outdir = Path(args.outdir)
+        outdir.mkdir(parents=True, exist_ok=True)
+        table.drop(columns=["prefix"]).to_csv(
+            f"{outdir}/{args.prefix}.predictions.tsv", index=False, header=True, sep="\t"
+        )
+        Path(f"{outdir}/{args.prefix}.predictions.bed").touch()
+        return
+
+    log.info(f"INFO: Predictions found: {len(table)}")
 
     _ = map_to_blocks(
         table,

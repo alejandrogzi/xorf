@@ -12,14 +12,14 @@
 //! heavily parallelized to offer fast performance on large datasets.
 
 use flate2::read::MultiGzDecoder;
-use genepred::{Bed12, GenePred, Gff, Gtf, Reader, ReaderResult, Strand, Writer, bed::BedFormat};
+use genepred::{bed::BedFormat, Bed12, GenePred, Gff, Gtf, Reader, ReaderResult, Strand, Writer};
 use rayon::prelude::*;
 use twobit::TwoBitFile;
 
 use std::{
     collections::HashMap,
     fmt::Debug,
-    fs::{File, create_dir_all},
+    fs::{create_dir_all, File},
     io::{BufRead, BufReader, BufWriter, Write},
     path::{Path, PathBuf},
     sync::Arc,
@@ -171,7 +171,13 @@ fn write_chunk(
         BufWriter::new(File::create(tmp.with_extension("fa")).unwrap_or_else(|e| panic!("{}", e)));
 
     let rescue_dir = outdir.join("rescue");
-    let rescue_bed_path = rescue_dir.join(tmp.file_name().unwrap());
+    let tmp_rescue = if !prefix.is_empty() {
+        outdir.join(format!("{}.tmp_{}.rescued.bed", prefix, idx))
+    } else {
+        outdir.join(format!("tmp_{}.rescued.bed", idx))
+    };
+
+    let rescue_bed_path = rescue_dir.join(tmp_rescue.file_name().unwrap());
     let rescue_fa_path = rescue_bed_path.with_extension("fa");
 
     // INFO: lazily created only if at least one record needs a flank rescue
@@ -719,8 +725,9 @@ mod tests {
     fn test_extract_seq_flank_out_of_bounds_rescued_with_zero_flanks() {
         // INFO: transcript close to the chromosome end so the 1000 bp
         // downstream flank exceeds the sequence length
-        let record =
-            record_from_bed12("chr1\t900\t1000\ttx2\t0\t+\t900\t1000\t0,0,0\t1\t100\t0".to_string());
+        let record = record_from_bed12(
+            "chr1\t900\t1000\ttx2\t0\t+\t900\t1000\t0,0,0\t1\t100\t0".to_string(),
+        );
 
         let seq = vec![b'N'; 1000];
 
@@ -732,8 +739,9 @@ mod tests {
 
     #[test]
     fn test_extract_seq_with_flanks() {
-        let record =
-            record_from_bed12("chr1\t1100\t1500\ttx3\t0\t+\t1100\t1500\t0,0,0\t1\t400\t0".to_string());
+        let record = record_from_bed12(
+            "chr1\t1100\t1500\ttx3\t0\t+\t1100\t1500\t0,0,0\t1\t400\t0".to_string(),
+        );
 
         let seq = vec![b'N'; 10000];
 
