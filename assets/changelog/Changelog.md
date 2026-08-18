@@ -58,6 +58,14 @@ All notable changes to this project are documented below.
 
 ---
 
+## [0.0.45] - 2026-08-18
+
+### Fixes
+- **Empty `predictions.tsv` is now truly empty**: When no ORF passes the coding-probability threshold, `predict.py` writes a zero-byte `predictions.tsv` (previously a header-only file) alongside the empty `predictions.bed`, so downstream consumers can no longer mistake a header line for a prediction record. A log line reports the created empty files. Module version bumped to `0.0.22`.
+
+### Infrastructure
+- Manifest updated: pipeline version `0.0.45`.
+
 ## [0.0.44] - 2026-08-18
 
 ### Fixes
