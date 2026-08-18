@@ -3,7 +3,7 @@
 __author__ = "Alejandro Gonzales-Irribarren"
 __email__ = "alejandrxgzi@gmail.com"
 __github__ = "https://github.com/alejandrogzi"
-__version__ = "0.0.21"
+__version__ = "0.0.22"
 
 import argparse
 import logging
@@ -338,10 +338,11 @@ def run(args: argparse.Namespace) -> None:
         log.info(f"INFO: No predictions found in {args.blast}/{args.samba}, will not map to blocks!")
         outdir = Path(args.outdir)
         outdir.mkdir(parents=True, exist_ok=True)
-        table.drop(columns=["prefix"]).to_csv(
-            f"{outdir}/{args.prefix}.predictions.tsv", index=False, header=True, sep="\t"
-        )
+
+        log.info(f"INFO: Creating empty {outdir}/{args.prefix}.predictions.[tsv|bed]")
+        Path(f"{outdir}/{args.prefix}.predictions.tsv").touch()
         Path(f"{outdir}/{args.prefix}.predictions.bed").touch()
+
         return
 
     log.info(f"INFO: Predictions found: {len(table)}")
