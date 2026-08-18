@@ -58,6 +58,15 @@ All notable changes to this project are documented below.
 
 ---
 
+## [0.0.44] - 2026-08-18
+
+### Fixes
+- **`predict.py` handles runs without predictions**: When no ORF passes the coding-probability threshold, `predict.py` now writes an empty (header-only) `predictions.tsv` and an empty `predictions.bed` instead of aborting `map_to_blocks`. The `PREDICT` process keeps its non-optional output contract, so runs with zero predictions complete cleanly instead of failing the task on missing output files. Module version bumped to `0.0.21`.
+- **Prefix-aware rescue filenames**: The `orf` chunker names the per-chunk rescue BED/FASTA files with the chunk prefix, so rescue files from different chunks can no longer collide in the shared `rescue/` directory. Module version bumped to `0.0.28`.
+
+### Infrastructure
+- Manifest updated: pipeline version `0.0.44`.
+
 ## [0.0.43] - 2026-08-18
 
 ### Fixes
