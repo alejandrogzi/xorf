@@ -312,8 +312,8 @@ workflow XORF {
       */
 
       ch_masked_chunked_regions
-          .mix(ch_unmasked_chunked_regions)
-          .mix(ch_rescue_chunked_regions)
+          .concat(ch_unmasked_chunked_regions)
+          .concat(ch_rescue_chunked_regions)
           .flatMap { meta, region -> 
               def regions = region instanceof List ? region : [region]
               regions.collect { it ->
@@ -321,8 +321,8 @@ workflow XORF {
               }
           .join(
               ch_masked_chunked_sequences
-                .mix(ch_unmasked_chunked_sequences)
-                .mix(ch_rescue_chunked_sequences)
+                .concat(ch_unmasked_chunked_sequences)
+                .concat(ch_rescue_chunked_sequences)
                 .flatMap { meta, fasta -> 
                     def fas = fasta instanceof List ? fasta : [fasta]
                     fas.collect { it ->
