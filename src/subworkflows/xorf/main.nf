@@ -77,7 +77,9 @@ workflow XORF {
       def ch_database = database
       def chunkSize   = chunk_size ?: 20
 
-      def localHash = randomHash()
+      // Use deterministic hash for reproducibility; previously randomHash() caused
+      // non-deterministic output file names and downstream ordering.
+      def localHash = params.prefix ? params.prefix.hashCode().toString().replaceAll("-", "").take(6) : "xorf"
 
       def ch_versions = Channel.empty()
 
