@@ -280,10 +280,10 @@ workflow XORF {
               ch_unmasked_chunked_sequences = UNMASKED_CHUNKER.out.chunked_sequences
 
               ch_rescue_chunked_regions = CHUNKER.out.rescue_regions
-                .mix(UNMASKED_CHUNKER.out.rescue_regions)
+                .concat(UNMASKED_CHUNKER.out.rescue_regions)
                 .map { meta, file -> [ meta + [ upstream: 0, downstream: 0 ], file ] }
               ch_rescue_chunked_sequences = CHUNKER.out.rescue_sequences
-                .mix(UNMASKED_CHUNKER.out.rescue_sequences)
+                .concat(UNMASKED_CHUNKER.out.rescue_sequences)
                 .map { meta, file -> [ meta + [ upstream: 0, downstream: 0 ], file ] }
 
               ch_versions = ch_versions.mix(GENOMEMASK_SELENO.out.versions)
