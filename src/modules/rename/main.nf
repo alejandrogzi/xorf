@@ -17,9 +17,9 @@ process RENAME_PREDICTIONS {
     tuple val(meta1), path(tsv)
 
     output:
-    tuple val(meta), path("*.bed"), path("*.tsv"), emit: files
-    tuple val(meta), path("*.bed")  , emit: bed
-    tuple val(meta), path("*.tsv")  , emit: tsv
+    tuple val(meta), path("*.renamed.bed"), path("*.renamed.tsv"), emit: files
+    tuple val(meta), path("*.renamed.bed")  , emit: bed
+    tuple val(meta), path("*.renamed.tsv")  , emit: tsv
     path "versions.yml"             , emit: versions
 
     when:
@@ -46,8 +46,8 @@ process RENAME_PREDICTIONS {
 
     stub:
     """
-    touch *.bed
-    touch *.tsv
+    touch dummy.renamed.bed
+    touch dummy.renamed.tsv
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
