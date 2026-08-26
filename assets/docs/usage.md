@@ -366,7 +366,7 @@ results/
 | `02_merged/` | One merged `*.bed` + `*.tsv` combining all renamed predictions | Skips when `skip_joined_concat: true` |
 | `02_merged/raw/` | Merged raw predictions | Only with `predict_keep_raw: true` |
 | `03_duplicates/` | `*.duplicates.bed` — predictions removed as duplicates | Only with `do_polishing: true` |
-| `04_results/` | `*.hq.bed` — the **final predictions**: duplicates removed, 3′UTR-truncated ORFs stripped | The files you want. Only with `do_polishing: true` |
+| `04_results/` | `*.hq.bed` — the **final predictions**: duplicates removed, 3′UTR-truncated ORFs stripped | The files you want, and what `XORF.out.files` emits when `do_polishing: true`. Truncation discards are `XORF.out.truncations`. |
 | `XORF_PIPELINE_INFO/` | `XORF_COUNTS/counts.tsv` + `xorf.versions.yml` | See below |
 | `pipeline_info/` | `execution_timeline_*.html`, `execution_trace_*.txt`, `execution_report_*.html`, `pipeline_dag_*.html` | Nextflow's own run reports |
 

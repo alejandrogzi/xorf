@@ -58,6 +58,17 @@ All notable changes to this project are documented below.
 
 ---
 
+## [0.0.46] - 2026-08-26
+
+### Fixes
+- **`XORF.out.files` is now the polished HQ**: With `do_polishing` (the default), the subworkflow still ran `DETACH_DUPLICATES` → `ISOTOOLS_TRUNCATION_DETECTOR` → `STRIP_TRUNCATIONS`, but `files` kept pointing at `CONCAT_RENAMED`. Downstream pipelines (xasm polish, the completion email) therefore started as soon as concat finished, in parallel with truncation stripping, and consumed predictions that still contained `#DU` duplicates and 3′UTR-truncated ORFs. `files` is now `STRIP_TRUNCATIONS.out.hq` joined back to the concat TSV, so consumers wait on `04_results`. When polishing is off, `files` is unchanged (concat / renamed output).
+
+### Added
+- **`XORF.out.truncations`** and **`XORF.out.duplicates`**: the STRIP discard BED and the DETACH duplicates BED. Empty channels when `do_polishing` is false, so callers can concat first-pass and second-pass discards without a flag check.
+
+### Infrastructure
+- Manifest updated: pipeline version `0.0.46`.
+
 ## [0.0.45] - 2026-08-18
 
 ### Fixes
