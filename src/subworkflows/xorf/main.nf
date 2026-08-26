@@ -441,6 +441,8 @@ workflow XORF {
 
       ch_full_length_with_duplicates = Channel.empty()
       ch_full_length_predictions = Channel.empty()
+      ch_truncations = Channel.empty()
+      ch_duplicates  = Channel.empty()
       if (!rename_deactivate) {
           RENAME_PREDICTIONS(
               CONCAT.out.bed,
@@ -520,6 +522,22 @@ workflow XORF {
               ISOTOOLS_TRUNCATION_DETECTOR.out.descriptor,
               "TRUNCATED"
           )
+
+          // `files` used to be CONCAT_RENAMED (pre-detach, pre-strip). Downstream
+          // consumers then raced polish: they started as soon as concat closed,
+          // while DETACH / iso-utr / STRIP ran as unused side tasks. Re-point
+          // the emit at stripped HQ so the DAG waits on 04_results.
+          ch_pre_polish_tsv = ch_full_length_predictions.map { meta, _bed, tsv ->
+              tuple(meta, tsv)
+          }
+          ch_full_length_predictions = STRIP_TRUNCATIONS.out.hq
+              .join(ch_pre_polish_tsv)
+              .map { meta, hq_bed, tsv -> tuple(meta, hq_bed, tsv) }
+          ch_truncations = STRIP_TRUNCATIONS.out.discard
+          ch_versions = ch_versions
+              .mix(DETACH_DUPLICATES.out.versions)
+              .mix(ISOTOOLS_TRUNCATION_DETECTOR.out.versions)
+              .mix(STRIP_TRUNCATIONS.out.versions)
       }
 
       /*
@@ -556,9 +574,11 @@ workflow XORF {
       ch_versions = ch_versions.mix(PREDICT_ORFS.out.versions)
 
     emit:
-      files = ch_full_length_predictions // [ meta, bed, tsv ]
-      counts = ch_counts
-      versions = ch_pipeline_versions
+      files        = ch_full_length_predictions // [ meta, bed, tsv ] — stripped HQ when do_polishing
+      truncations  = ch_truncations             // [ meta, bed ] STRIP discard; empty if !do_polishing
+      duplicates   = ch_duplicates              // [ meta, bed ] DETACH duplicates; empty if !do_polishing
+      counts       = ch_counts
+      versions     = ch_pipeline_versions
 }
 
 /*
