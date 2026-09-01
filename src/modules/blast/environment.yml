@@ -6,4 +6,5 @@ dependencies:
   - python=3.9
   - pip
   - diamond
+  - mmseqs2
   - orfipy>=0.0.4

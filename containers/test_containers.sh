@@ -104,9 +104,14 @@ echo "Running: docker run --rm  --entrypoint sh "${REGISTRY}/orf-blast:${TAG}" -
 docker run --rm  --entrypoint sh "${REGISTRY}/orf-blast:${TAG}" -c "diamond --version" > /dev/null 2>&1
 test_result
 
-echo -e "${BLUE}[TEST 12/12]${NC} orf-blast: orfipy availability"
+echo -e "${BLUE}[TEST 12/13]${NC} orf-blast: orfipy availability"
 echo "Running: docker run --rm --entrypoint sh "${REGISTRY}/orf-blast:${TAG}" -c "orfipy --version""
 docker run --rm --entrypoint sh "${REGISTRY}/orf-blast:${TAG}" -c "orfipy --version" > /dev/null 2>&1
+test_result
+
+echo -e "${BLUE}[TEST 13/13]${NC} orf-blast: mmseqs availability"
+echo "Running: docker run --rm --entrypoint sh "${REGISTRY}/orf-blast:${TAG}" -c "mmseqs version""
+docker run --rm --entrypoint sh "${REGISTRY}/orf-blast:${TAG}" -c "mmseqs version" > /dev/null 2>&1
 test_result
 
 # ==============================================================================

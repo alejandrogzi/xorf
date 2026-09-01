@@ -46,6 +46,7 @@ RUN micromamba create -y -n blastenv -c conda-forge -c bioconda \
     pip \
     diamond=2.2.4 \
     psauron=1.1.3 \
+    mmseqs2 \
     && micromamba clean -a -y
 
 # Install orfipy via pip (requires gcc for Cython compilation)
@@ -70,6 +71,7 @@ WORKDIR /data
 # Verify installations (tools should be directly in PATH now)
 RUN orf blast --help && \
     diamond --version && \
+    mmseqs version && \
     orfipy --version
 
 # ENTRYPOINT ["orf"]

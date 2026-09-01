@@ -58,6 +58,22 @@ All notable changes to this project are documented below.
 
 ---
 
+## [0.0.47] - 2026-09-01
+
+### Features
+- **MMseqs2 BLAST engine**: `orf blast --engine mmseqs2` searches with MMseqs2 instead of DIAMOND (still the default). MMseqs2 is asked for the same 11 columns DIAMOND already writes (`query,pident,qlen,tlen,alnlen,qstart,qend,tstart,tend,evalue,target`), so the existing `BlastRecord` parser, best-hit selection, and downstream classifier features are unchanged. Protein search (`--search-type 1`), e-value `1e-10`, and e-value-sorted hits match the DIAMOND filters. Passing a `.dmnd` path with `--engine mmseqs2` fails fast. Module version bumped to `0.0.29`.
+- **`--engine` pipeline parameter**: `diamond` (default) or `mmseqs2`. With `mmseqs2` the pipeline never downloads the zenodo DIAMOND archive: it uses `raw_database` (SwissProt FASTA), optionally merges a FASTA `custom_database`, and indexes once. A `.dmnd` `custom_database` with `engine` `mmseqs2` is rejected.
+
+### Fixes
+- **`--database` / `--downstream-flank` short-option clash**: both used `-d`, which made `orf blast --help` panic in debug builds. `--database` is now `-D`; `-d` stays `--downstream-flank`, matching the other subcommands.
+- **Search thread count**: DIAMOND and MMseqs2 were hardcoded to `--threads 8` while BLAST is a 4-cpu `process_low` task. Both tools now take `orf --threads N` (the BLAST process passes `task.cpus`).
+
+### Infrastructure
+- New module `MMSEQS_CREATEDB` (`src/modules/mmseqs/createdb/`): `createdb` + `createindex` once per run, emits a directory so BLAST chunks reuse the same target instead of rebuilding SwissProt on every chunk.
+- The BLAST container and conda env install `mmseqs2`; container tests check `mmseqs version`.
+- BLAST `versions.yml` records mmseqs; help, `params.json`, and `usage.md` document `engine`.
+- Manifest updated: pipeline version `0.0.47`.
+
 ## [0.0.46] - 2026-08-26
 
 ### Fixes

@@ -89,12 +89,12 @@ You need:
 | Regions | The genomic regions you want to scan for ORFs | BED, GTF, GFF | **Yes** |
 | Genome sequence | The genome those regions come from | FASTA (`.fa`, `.fa.gz`), 2bit | **Yes** |
 | Selenocysteine sites | Known TGA codons that code for selenocysteine (see [Selenocysteine masking](#selenocysteine-masking)) | BED | No |
-| Protein database | A DIAMOND protein database used by BLAST, or your own protein sequences | `.dmnd` / `.dmnd.gz`, or FASTA (`.fa`, `.fasta`, optionally gzipped) | No |
+| Protein database | A protein database used by BLAST (DIAMOND `.dmnd`, or FASTA for mmseqs2 / custom sequences) | `.dmnd` / `.dmnd.gz`, or FASTA (`.fa`, `.fasta`, optionally gzipped) | No |
 
 > [!NOTE]
 > You do **not** need to provide a protein database. If `custom_database` is left
-> empty, xorf automatically downloads the UniProt/SwissProt database for you when
-> the pipeline starts.
+> empty, xorf automatically downloads UniProt/SwissProt when the pipeline starts
+> (the zenodo DIAMOND archive, or the FASTA from `raw_database` when `engine` is `mmseqs2`).
 ---
 
 ## Quick start
@@ -178,16 +178,19 @@ settings belong in `params.json`.
 
 | Parameter | Type | Default | What it does |
 |---|---|---|---|
-| `database` | URL | Zenodo UniProt/SwissProt (DIAMOND) | URL the pipeline downloads the protein database from. Only used when `custom_database` is not set. |
-| `raw_database` | URL | UniProt/SwissProt sequences (`uniprot_sprot.fasta.gz`) | Raw protein sequences the custom FASTA is appended to. Only used when `custom_database` is a FASTA file. |
-| `custom_database` | path | `null` | **Your own** database. Give a DIAMOND database (`.dmnd`, optionally `.dmnd.gz`) to *replace* the default, or a FASTA file (`.fa`, `.fasta`, optionally gzipped) to *append* to the default SwissProt database — xorf merges the sequences and rebuilds a DIAMOND database on the fly. |
+| `engine` | string | `diamond` | BLAST search engine: `diamond` or `mmseqs2`. |
+| `database` | URL | Zenodo UniProt/SwissProt (DIAMOND) | URL the pipeline downloads the protein database from. Only used when `engine` is `diamond` and `custom_database` is not set. |
+| `raw_database` | URL | UniProt/SwissProt sequences (`uniprot_sprot.fasta.gz`) | Raw protein FASTA. Used as the default when `engine` is `mmseqs2`, and as the sequences a FASTA `custom_database` is appended to. |
+| `custom_database` | path | `null` | **Your own** database. Give a DIAMOND database (`.dmnd`, optionally `.dmnd.gz`) to *replace* the default (diamond engine only), or a FASTA file (`.fa`, `.fasta`, optionally gzipped) to *append* to SwissProt — xorf merges the sequences and rebuilds the engine's database on the fly. |
 
 **When to change this:** leave everything alone for a quick start — the default
-database is downloaded automatically. Use `custom_database` if you want to:
+database is downloaded automatically. Use `engine` `mmseqs2` to search with
+MMseqs2 instead of DIAMOND (faster; uses `raw_database`, not the zenodo `.dmnd`).
+Use `custom_database` if you want to:
 
 - **Replace** the default with a curated/species-specific DIAMOND database
   (`.dmnd`), e.g. because you are offline or the download is slow on your
-  cluster.
+  cluster. Not valid with `engine` `mmseqs2`.
 - **Extend** the default with your own proteins (FASTA): any sequence you
   provide is appended to the SwissProt set and the combined set is reindexed
   before BLAST runs. Use `raw_database` to control what your sequences are

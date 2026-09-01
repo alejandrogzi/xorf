@@ -46,10 +46,13 @@ if (params.help) {
 
     Optional parameters (common):
         --outdir              PATH    Output directory [default: ./results]
+        --engine              STRING  BLAST engine: diamond or mmseqs2 [default: diamond]
         --custom_database     PATH    Path to custom database [default: null]:
-                                      .dmnd/.dmnd.gz replaces the default database;
-                                      .fa/.fasta/.fa.gz/.fasta.gz is appended to the default SwissProt database
-        --raw_database        URL     Raw protein sequences used when custom_database is a FASTA [default: UniProt/SwissProt]
+                                      diamond: .dmnd/.dmnd.gz replaces the default database;
+                                      fasta (.fa/.fasta/.fa.gz/.fasta.gz) is appended to raw_database
+                                      mmseqs2: fasta is appended to raw_database; .dmnd is rejected
+        --raw_database        URL     Raw protein FASTA (SwissProt). Used for fasta custom_database
+                                      and as the default when --engine mmseqs2 [default: UniProt/SwissProt]
         --chunk_size          INT     Chunk size for parallel processing [default: 20]
         --predict_keep_raw    BOOL      Keep raw predictions [default: false]
         --selenocysteine_sites PATH      Selenocysteine masking [default: null]
@@ -85,9 +88,12 @@ include { XORF as MAIN }         from './subworkflows/xorf/main.nf'
 include { WGET as WGET_SAMBA_WEIGHTS } from './modules/wget/main.nf'
 include { UNTAR } from './modules/untar/main.nf'
 include { WGET as WGET_PROTEIN_DATABASE } from './modules/wget/main.nf'
+include { WGET as WGET_MMSEQS_FASTA } from './modules/wget/main.nf'
 include { GUNZIP as GUNZIP_DATABASE } from './modules/gunzip/main.nf'
 include { FASTA_MERGE } from './modules/diamond/merge/main.nf'
+include { FASTA_MERGE as FASTA_MERGE_MMSEQS } from './modules/diamond/merge/main.nf'
 include { DIAMOND_MAKEDB } from './modules/diamond/makedb/main.nf'
+include { MMSEQS_CREATEDB } from './modules/mmseqs/createdb/main.nf'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -99,6 +105,12 @@ def validateRun() {
     def errors = []
     if (!params.regions)   errors << "  --regions is required"
     if (!params.sequence)  errors << "  --sequence is required"
+    if (!(params.engine in ['diamond', 'mmseqs2'])) {
+        errors << "  --engine must be 'diamond' or 'mmseqs2' (got: ${params.engine})"
+    }
+    if (params.engine == 'mmseqs2' && params.custom_database && isDiamondDb(params.custom_database)) {
+        errors << "  --engine mmseqs2 cannot use a diamond .dmnd database; pass FASTA or omit custom_database"
+    }
 
     if (errors) {
         log.error "Parameter validation failed:\n${errors.join('\n')}"
@@ -172,7 +184,7 @@ workflow XORF {
 
       Regions:   ${params.regions}
       Sequence:  ${params.sequence}
-      Database:  ${params.database} (custom: ${params.custom_database})
+      Database:  ${params.database} (custom: ${params.custom_database}, engine: ${params.engine})
       Outdir:    ${params.outdir}
       Run only:  ${params.run_only_on} (mode: ${params.run_only_mode}, target: ${params.run_only_target})
       Profile:   ${workflow.profile}
@@ -214,7 +226,41 @@ workflow XORF {
 
     ch_database = Channel.empty()
     ch_database_versions = Channel.empty()
-    if (params.custom_database) {
+    if (params.engine == 'mmseqs2') {
+      // INFO: mmseqs2 never uses the zenodo diamond .dmnd artifact.
+      // Default target is params.raw_database (SwissProt FASTA).
+      if (params.custom_database && !isProteinFasta(params.custom_database)) {
+          error """
+          ERROR: custom_database extension not recognized for --engine mmseqs2.
+          Please provide a FASTA file:
+            .fa/.fasta/.fa.gz/.fasta.gz -> appended to raw_database and indexed with mmseqs
+          """.stripIndent()
+      }
+
+      WGET_MMSEQS_FASTA(
+          Channel.value(params.raw_database)
+          .map { it -> [ [ id: 'uniprot_sprot.fasta.gz' ], it ] }
+      )
+
+      ch_mmseqs_fasta = WGET_MMSEQS_FASTA.out.outfile
+          .map { meta, fasta -> [ [ id: 'mmseqs_db' ], fasta ] }
+      ch_database_versions = Channel.empty()
+
+      if (params.custom_database) {
+          FASTA_MERGE_MMSEQS(
+              Channel.fromPath(params.custom_database, checkIfExists: true)
+                .map { it -> [ [ id: it.baseName ], it ] }
+                .combine(WGET_MMSEQS_FASTA.out.outfile.map { meta, raw -> raw })
+          )
+          ch_mmseqs_fasta = FASTA_MERGE_MMSEQS.out.fasta
+              .map { meta, fasta -> [ [ id: 'merged_database' ], fasta ] }
+          ch_database_versions = FASTA_MERGE_MMSEQS.out.versions
+      }
+
+      MMSEQS_CREATEDB(ch_mmseqs_fasta)
+      ch_database = MMSEQS_CREATEDB.out.db.map { meta, it -> it }
+      ch_database_versions = ch_database_versions.mix(MMSEQS_CREATEDB.out.versions)
+    } else if (params.custom_database) {
       // INFO: .dmnd / .dmnd.gz -> replaces the default database entirely
       if (params.custom_database.endsWith('.dmnd')) {
           ch_database = Channel.fromPath(params.custom_database, checkIfExists: true)
@@ -229,8 +275,7 @@ workflow XORF {
             .set { ch_database }
       // INFO: .fa / .fasta / .fa.gz / .fasta.gz -> downloaded raw database + custom
       // sequences are merged, then reindexed with DIAMOND_MAKEDB
-      } else if (params.custom_database.endsWith('.fa') || params.custom_database.endsWith('.fasta')
-                  || params.custom_database.endsWith('.fa.gz') || params.custom_database.endsWith('.fasta.gz')) {
+      } else if (isProteinFasta(params.custom_database)) {
           WGET_PROTEIN_DATABASE(
               Channel.value(params.raw_database)
               .map { it -> [ [ id: 'uniprot_sprot.fasta.gz' ], it ] }
@@ -320,6 +365,16 @@ def randomHash() {
     def chars = ('0'..'9') + ('a'..'z') + ('A'..'Z')
     def random = new Random()
     return (1..6).collect { chars[random.nextInt(chars.size())] }.join()
+}
+
+def isProteinFasta(path) {
+    def p = path.toString().toLowerCase()
+    return p.endsWith('.fa') || p.endsWith('.fasta') || p.endsWith('.fa.gz') || p.endsWith('.fasta.gz')
+}
+
+def isDiamondDb(path) {
+    def p = path.toString().toLowerCase()
+    return p.endsWith('.dmnd') || p.endsWith('.dmnd.gz')
 }
 
 /*
