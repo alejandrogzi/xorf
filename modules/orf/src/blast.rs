@@ -24,7 +24,11 @@ use std::path::{Path, PathBuf};
 use std::str::{from_utf8, FromStr};
 use std::sync::Arc;
 
-use crate::{cli::BlastArgs, consts::*, utils::*};
+use crate::{
+    cli::{BlastArgs, Engine},
+    consts::*,
+    utils::*,
+};
 
 /// Run diamont on the a nested orfipy input + translationAi fasta
 ///
@@ -42,7 +46,7 @@ use crate::{cli::BlastArgs, consts::*, utils::*};
 /// let args = Args::parse();
 /// run_blast(args);
 /// ```
-pub fn run_blast(args: BlastArgs) {
+pub fn run_blast(args: BlastArgs, threads: usize) {
     let dir = args.outdir.join(format!("{}.orf", args.prefix));
     std::fs::create_dir_all(&dir)
         .unwrap_or_else(|e| panic!("ERROR: could not create directory -> {e}!"));
@@ -81,7 +85,7 @@ pub fn run_blast(args: BlastArgs) {
         args.prefix.clone(),
     );
 
-    __run_diamond_and_psauron(table, args.database, &dir, args.prefix);
+    __run_diamond_and_psauron(table, args.database, &dir, args.prefix, args.engine, threads);
 
     if !args.keep_temp {
         println!("INFO: removing temporary files in {dir:?}");
@@ -207,24 +211,62 @@ fn __run_diamond_and_psauron(
     database: PathBuf,
     outdir: &Path,
     prefix: String,
+    engine: Engine,
+    threads: usize,
 ) {
-    let diamond = outdir.join(format!("{}.orf.diamond", prefix));
+    let blasting = match engine {
+        Engine::Diamond => outdir.join(format!("{}.orf.diamond", prefix)),
+        Engine::Mmseqs2 => outdir.join(format!("{}.orf.mmseqs2", prefix)),
+    };
     let orfs = outdir.join(format!("{}.orf.dedup.pep", prefix));
     let psauron = outdir.join(format!("{}.orf.psauron", prefix));
+    let mmseqs_tmp = outdir.join(format!("{}.mmseqs.tmp", prefix));
 
-    let cmd = format!(
-        "diamond blastp --query {} --db {} --out {} --outfmt 6 qseqid pident qlen slen length qstart qend sstart send evalue sseqid --threads 8 --sensitive -e 1e-10",
-        orfs.display(),
-        database.display(),
-        diamond.display()
-    );
+    if engine == Engine::Mmseqs2
+        && database
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("dmnd"))
+    {
+        panic!(
+            "ERROR: mmseqs2 needs a FASTA or mmseqs database, not a diamond .dmnd file -> {database:?}"
+        );
+    }
+
+    if engine == Engine::Mmseqs2 {
+        std::fs::create_dir_all(&mmseqs_tmp).unwrap_or_else(|e| {
+            panic!("ERROR: could not create mmseqs tmp dir {mmseqs_tmp:?} -> {e}")
+        });
+    }
+
+    let cmd = match engine {
+        Engine::Diamond => format!(
+            "diamond blastp --query {} --db {} --out {} --outfmt 6 qseqid pident qlen slen length qstart qend sstart send evalue sseqid --threads {} --sensitive -e 1e-10",
+            orfs.display(),
+            database.display(),
+            blasting.display(),
+            threads
+        ),
+        Engine::Mmseqs2 => format!(
+            "mmseqs easy-search {} {} {} {} --threads {} --search-type 1 -e 1e-10 --sort-results 1 --remove-tmp-files 1 --format-output query,pident,qlen,tlen,alnlen,qstart,qend,tstart,tend,evalue,target",
+            orfs.display(),
+            database.display(),
+            blasting.display(),
+            mmseqs_tmp.display(),
+            threads
+        ),
+    };
+
     println!("INFO: Executing -> {}", cmd);
 
     std::process::Command::new("bash")
         .arg("-c")
         .arg(cmd)
         .status()
-        .unwrap_or_else(|e| panic!("ERROR: failed to execute diamond command -> {e}"));
+        .unwrap_or_else(|e| panic!("ERROR: failed to execute {engine} command -> {e}"));
+
+    if engine == Engine::Mmseqs2 {
+        let _ = std::fs::remove_dir_all(&mmseqs_tmp);
+    }
 
     let cmd = format!("psauron -i {} -o {} -p", orfs.display(), psauron.display());
     println!("INFO: Executing -> {}", cmd);
@@ -239,18 +281,20 @@ fn __run_diamond_and_psauron(
 
     // WARN: breaking point -> if BLAST is empty we throw an error; very plausible to happen
     // WARN: we now avoid panicking and instead return an empty table
-    let predictions = reader(&diamond).unwrap_or_default();
+    let predictions = reader(&blasting).unwrap_or_default();
     if predictions.is_empty() {
-        println!("WARN: no predictions found for {diamond:?}. Will proceed with empty BLAST table");
+        println!(
+            "WARN: no predictions found for {blasting:?}. Will proceed with empty BLAST table"
+        );
     }
 
     let psauron_predictions = read_psauron(psauron);
 
-    let mut writer = BufWriter::new(File::create(diamond.with_extension(RESULT)).unwrap_or_else(
-        |e| {
+    let mut writer = BufWriter::new(
+        File::create(blasting.with_extension(RESULT)).unwrap_or_else(|e| {
             panic!("ERROR: failed to create output file for blast results -> {e}");
-        },
-    ));
+        }),
+    );
 
     for line in predictions.lines() {
         let parts: Vec<&str> = line.split('\t').collect();
@@ -2063,4 +2107,33 @@ fn read_nets<P: AsRef<Path> + std::fmt::Debug>(path: P) -> HashMap<String, NetRe
     });
 
     accumulator
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn from_parts_reads_shared_diamond_mmseqs_layout() {
+        let parts = [
+            "17",
+            "97.2",
+            "142",
+            "357",
+            "141",
+            "1",
+            "141",
+            "217",
+            "357",
+            "5.09e-93",
+            "sp|O55165|KIF3C_RAT",
+        ];
+        let record = BlastRecord::from_parts(&parts);
+        assert_eq!(record.blast_pid, 97.2);
+        assert!((record.blast_e_value - 5.09e-93).abs() < 1e-100);
+        assert_eq!(record.blast_offset, 216);
+        assert_eq!(record.blast_alignment_len, 141);
+        assert!((record.percent_aligned - (141.0 / 142.0 * 100.0)).abs() < 0.01);
+        assert_eq!(record.reference_id, "KIF3C_RAT");
+    }
 }

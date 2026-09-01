@@ -36,8 +36,10 @@ process BLAST {
 
     def prefix = task.ext.prefix ?: "${meta.id}_${meta.name}"
     prefix = prefix.replaceAll('\\.', '_')
+    def engine = params.engine ?: 'diamond'
+    def db = database.isDirectory() ? "${database}/protein" : "${database}"
     """
-    orf blast \\
+    orf --threads ${task.cpus} blast \\
     --fasta $sequence \\
     --bed $bed \\
     --tai $predictions \\
@@ -45,10 +47,11 @@ process BLAST {
     --outdir . \\
     --orf-min-len $orf_min_len \\
     --orf-min-percent $orf_min_percent \\
-    --database $database \\
+    --database $db \\
     --upstream-flank $upstream \\
     --downstream-flank $downstream \\
     --prefix $prefix \\
+    --engine $engine \\
     $keep_temp \\
     $args
 
@@ -56,6 +59,7 @@ process BLAST {
     "${task.process}":
         orf-blast: \$(orf --version 2>&1 | sed 's/^.*orf //; s/ .*\$//')
         diamond: \$(diamond version 2>&1 | sed 's/^.*diamond version //' )
+        mmseqs: \$(mmseqs version 2>&1 | sed 's/^.*MMseqs Version: //; s/ .*\$//' | head -n 1)
         psauron: \$(psauron --version 2>&1 | sed 's/^.*psauron //; s/ .*\$//')
     END_VERSIONS
     """
@@ -71,6 +75,7 @@ process BLAST {
     "${task.process}":
         orf-blast: \$(orf --version 2>&1 | sed 's/^.*orf //; s/ .*\$//')
         diamond: \$(diamond version 2>&1 | sed 's/^.*diamond version //' )
+        mmseqs: \$(mmseqs version 2>&1 | sed 's/^.*MMseqs Version: //; s/ .*\$//' | head -n 1)
         psauron: \$(psauron --version 2>&1 | sed 's/^.*psauron //; s/ .*\$//')
     END_VERSIONS
     """

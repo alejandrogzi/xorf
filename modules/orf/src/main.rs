@@ -23,7 +23,7 @@ fn main() {
         .unwrap();
 
     match args.command {
-        Commands::Blast(args) => run_blast(args),
+        Commands::Blast(blast_args) => run_blast(blast_args, args.threads),
         Commands::Tai(args) => run_tai(args),
         Commands::Samba(args) => run_samba(args),
         Commands::Chunk(args) => run_chunk(args),

@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
 
 pub const NMD_DISTANCE: u64 = 55; // 55 bp
@@ -77,7 +77,7 @@ pub struct BlastArgs {
     pub outdir: PathBuf,
 
     #[arg(
-        short = 'd',
+        short = 'D',
         long = "database",
         required = true,
         help = "Path to protein database"
@@ -188,6 +188,15 @@ pub struct BlastArgs {
         action = clap::ArgAction::SetTrue
     )]
     pub keep_temp: bool,
+
+    #[arg(
+        long = "engine",
+        required = false,
+        help = "Engine to use for blast [diamond, mmseqs2]",
+        default_value_t = Engine::Diamond,
+        value_enum
+    )]
+    pub engine: Engine,
 }
 
 #[derive(Debug, Parser)]
@@ -305,6 +314,21 @@ pub struct ChunkArgs {
         help = "Prefix for output files"
     )]
     pub prefix: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum Engine {
+    Diamond,
+    Mmseqs2,
+}
+
+impl std::fmt::Display for Engine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Engine::Diamond => write!(f, "diamond"),
+            Engine::Mmseqs2 => write!(f, "mmseqs2"),
+        }
+    }
 }
 
 #[derive(Debug, Parser)]
