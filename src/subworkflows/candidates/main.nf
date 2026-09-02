@@ -24,7 +24,6 @@ include { NETSTART }    from '../../modules/netstart/main.nf'
 include { TRANSAID }    from '../../modules/transaid/main.nf'
 include { BLAST }       from '../../modules/blast/main.nf'
 include { JOIN as JOIN_NETS }   from '../../modules/join/main.nf'
-include { WGET as WGET_SAMBA_WEIGHTS } from '../../modules/wget/main.nf'
 
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -37,6 +36,7 @@ workflow GET_CANDIDATES {
       ch_pairs       // channel: [ meta, path ]
       ch_database    // channel: [ meta, path ]
       samba_weights  // path
+      esm_weights    // path
       skip_netstart  // boolean
 
     main:
@@ -106,7 +106,8 @@ workflow GET_CANDIDATES {
       // INFO: RNASAMBA.out.samba is a channel of [meta, tsv]
       BLAST(
           ch_pre_candidates,
-          ch_database
+          ch_database,
+          esm_weights
       )
       .blast
       .join(RNASAMBA.out.samba)

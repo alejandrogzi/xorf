@@ -3,7 +3,7 @@
 __author__ = "Alejandro Gonzales-Irribarren"
 __email__ = "alejandrxgzi@gmail.com"
 __github__ = "https://github.com/alejandrogzi"
-__version__ = "0.0.22"
+__version__ = "0.0.23"
 
 import argparse
 import logging
@@ -47,6 +47,7 @@ BLAST_COLS: List = [
     "psauron_score",
     "blast_reference_id"
 ]
+ESM_BLAST_COLS: List = BLAST_COLS[:-1] + ["esm_plddt", BLAST_COLS[-1]]
 SAMBA_COLS: List = ["prefix", "rna_score"]
 TAI_MASKING_NAN_COLS: List = [
     "tai_start_score",
@@ -619,12 +620,21 @@ def read_blast(path: Union[str, PathLike, Path]) -> pd.DataFrame:
     >>> # blast_df = read_blast("my_blast.tsv")
     >>> # print(blast_df.head())
     """
-    blast = pd.read_csv(path, sep="\t", header=None, names=BLAST_COLS)
+    blast = pd.read_csv(path, sep="\t", header=None)
+    if blast.shape[1] == len(BLAST_COLS):
+        blast.columns = BLAST_COLS
+    elif blast.shape[1] == len(ESM_BLAST_COLS):
+        blast.columns = ESM_BLAST_COLS
+    else:
+        raise ValueError(
+            f"BLAST input has {blast.shape[1]} columns; expected "
+            f"{len(BLAST_COLS)} or {len(ESM_BLAST_COLS)}"
+        )
 
     # INFO: needs to be the canonical ID
     # R1_chr1__OR2#NE1 -> R1_chr1 [samba] + R1_chr1:1-10(+) [bed]
     blast["prefix"] = blast["id"].astype(str).str.split("_ORF").str[0]
-    blast["prefix"] = blast["prefix"].str.split("\.p").str[0]
+    blast["prefix"] = blast["prefix"].str.split(r"\.p").str[0]
 
     blast["key"] = (
         blast["prefix"]

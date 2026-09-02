@@ -1,8 +1,7 @@
 # ==============================================================================
 # blast.Dockerfile - Container for 'orf blast' subcommand
 # ==============================================================================
-# Includes: orf binary + diamond + orfipy (Python 3.9)
-# Result: ~500MB container
+# Includes: orf binary + diamond + orfipy + CPU ESMFold2-Fast
 
 # ---------- Build Stage ----------
 FROM rust:1.93-slim-bullseye AS builder
@@ -24,6 +23,7 @@ USER root
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
+    git \
     procps \
     gcc \
     g++ \
@@ -40,18 +40,37 @@ USER $MAMBA_USER
 ENV MAMBA_ROOT_PREFIX=/opt/conda
 ENV PATH=/opt/conda/bin:$PATH
 
-# Create Python 3.9 environment with diamond and orfipy
+# Create Python 3.12 environment with protein-search tools
 RUN micromamba create -y -n blastenv -c conda-forge -c bioconda \
-    python=3.9 \
+    python=3.12 \
     pip \
     diamond=2.2.4 \
-    psauron=1.1.3 \
     mmseqs2 \
     && micromamba clean -a -y
 
 # Install orfipy via pip (requires gcc for Cython compilation)
 RUN micromamba run -n blastenv pip install --no-cache-dir \
     "orfipy>=0.0.4"
+
+# Install PSAURON and ESM in the same transaction so one CPU-only PyTorch owns
+# the environment. Upstream ESM currently declares CUDA cuequivariance wheels
+# unconditionally on x86_64; remove them because ESMFold2 has a PyTorch fallback.
+RUN micromamba run -n blastenv pip install --no-cache-dir \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    "numpy<2" \
+    "torch==2.11.0+cpu" \
+    "torchvision==0.26.0+cpu" \
+    "torchaudio==2.11.0+cpu" \
+    "psauron==1.1.3" \
+    "transformers==4.57.6" \
+    "esm @ git+https://github.com/evolutionaryscale/esm.git@827ec128e4cdaf80f7d6f95fb367a08980b34918" && \
+    micromamba run -n blastenv pip uninstall -y \
+    cuequivariance-torch \
+    cuequivariance-ops-torch-cu13 \
+    cuequivariance-ops-cu13 \
+    nvidia-cublas \
+    nvidia-cuda-nvrtc \
+    nvidia-ml-py
 
 # Copy Rust binary
 USER root
@@ -61,7 +80,7 @@ RUN chmod +x /usr/local/bin/orf
 # Set environment variables so conda environment is available
 ENV PATH="/opt/conda/envs/blastenv/bin:$PATH"
 ENV LD_LIBRARY_PATH="/opt/conda/envs/blastenv/lib:$LD_LIBRARY_PATH"
-ENV PYTHONPATH="/opt/conda/envs/blastenv/lib/python3.9/site-packages:$PYTHONPATH"
+ENV PYTHONPATH="/opt/conda/envs/blastenv/lib/python3.12/site-packages:$PYTHONPATH"
 
 # Create non-root user
 RUN useradd -m -u 1000 orfuser
@@ -72,7 +91,8 @@ WORKDIR /data
 RUN orf blast --help && \
     diamond --version && \
     mmseqs version && \
-    orfipy --version
+    orfipy --version && \
+    python -c "import torch, torchaudio, torchvision; from esm.models.esmfold2 import EsmFold2Model; assert torch.version.cuda is None"
 
 # ENTRYPOINT ["orf"]
 # CMD ["blast", "--help"]

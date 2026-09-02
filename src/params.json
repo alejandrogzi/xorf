@@ -7,6 +7,8 @@
 
     "//1.1": "── Protein database [optional; default downloads UniProt/SwissProt; engine diamond uses zenodo .dmnd, mmseqs2 uses raw_database FASTA; custom_database .dmnd/.dmnd.gz replaces diamond DB, .fa/.fasta is appended to raw_database] ────",
     "engine": "diamond",
+    "esm": false,
+    "esmfold_local_weights": null,
     "custom_database": null,
 
     "//1.2": "── Netstart [optional] ───────────────────────────────────────────",

@@ -58,6 +58,23 @@ All notable changes to this project are documented below.
 
 ---
 
+## [0.1.0] - 2026-09-02
+
+### Features
+- **CPU ESMFold2-Fast pLDDT on BLAST**: `orf blast --esm` / `-E` (and the pipeline `esm` parameter, default off) folds each BLAST peptide with ESMFold2-Fast on CPU in FP32 and appends mean pLDDT (0–100) as `esm_plddt`, immediately before `blast_reference_id`. Inner `*` residues are rewritten to `X`, a terminal `*` is stripped, and sequences longer than 2048 aa are skipped with a warning and scored 0. No GPU path. The helper is embedded in `orf` (`esmfold2_fast.py`); pins are ESMFold2-Fast `c6c7958…` and ESMC-6B `650e98b…`. Module version bumped to `0.0.30`.
+- **`DOWNLOAD_ESMFOLD_WEIGHTS`**: When `esm` is true, the pipeline prefetches the pinned Hugging Face hub cache once (~26 GB: Fast + ESMC-6B backbone) instead of letting every scattered BLAST task download it. The cache is published to `${outdir}/00_weights/esmfold_cache` and is not deleted. BLAST stages that directory and sets `HUGGINGFACE_HUB_CACHE` / `HF_HUB_OFFLINE=1` so the helper loads offline.
+- **`esmfold_local_weights`**: Path to an existing hub cache (`models--biohub--ESMFold2-Fast` and `models--biohub--ESMC-6B`). Set this with `esm` to skip the download and reuse a previous publish dir or `$HF_HOME/hub`. Missing paths, files, or a raw `HF_HOME` (parent of `hub/`) fail in `validateRun()`.
+
+### Fixes
+- **`predict.py` BLAST reader**: Accepts both the legacy 25-column table and the optional 26-column `esm_plddt` table. `esm_plddt` is kept out of `FEATURES` / `ORDER` (benchmark metadata until the classifier is retrained). The `prefix` split on `.p` is now a regex (`r"\.p"`), which is the documented pandas behaviour. Module version bumped to `0.0.23`.
+
+### Infrastructure
+- BLAST container and conda env move to Python 3.12 with CPU-only PyTorch, pinned `esm` (`evolutionaryscale/esm@827ec12…`), and CUDA cuequivariance / NVIDIA wheels uninstalled so ESMFold2 uses the PyTorch fallback.
+- BLAST is now `process_high_memory` (4 CPUs, 30 GB, 10 h). The unused 200 GB memory-only overlay is replaced; other `process_low` modules stay at 10 GB / 4 h. The BLAST `time = 2.h` override is removed so the 10 h label actually applies. CPU FP32 folding peaked at ~26 GB RSS in the SCAF8 bench.
+- On SLURM, BLAST `scratch` is disabled when `esm` is on so the ~26 GB cache is not copied into every array task. `DOWNLOAD_ESMFOLD_WEIGHTS` is `process_single` with a 12 h wall time.
+- New module `src/modules/esmfold/main.nf`; `esmfold2_fast.py --prefetch CACHE_DIR` is the single source of model/revision pins. Help, `params.json`, `usage.md`, and `README.md` document `esm` and `esmfold_local_weights`.
+- Manifest updated: pipeline version `0.1.0`.
+
 ## [0.0.47] - 2026-09-01
 
 ### Features

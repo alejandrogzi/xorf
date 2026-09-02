@@ -9,7 +9,7 @@
 
 process BLAST {
     tag "$meta.id:$meta.name"
-    label 'process_low'
+    label 'process_high_memory'
 
     conda "${moduleDir}/environment.yml"
     container 'ghcr.io/hillerlab/orf-blast:latest'
@@ -17,6 +17,7 @@ process BLAST {
     input:
     tuple val(meta), path(bed), path(sequence), path(predictions), path(net)
     each path(database)
+    each path(esm_cache)
 
     output:
     tuple val(meta), path(bed), path("*/*result"), optional: true, emit: blast
@@ -38,7 +39,15 @@ process BLAST {
     prefix = prefix.replaceAll('\\.', '_')
     def engine = params.engine ?: 'diamond'
     def db = database.isDirectory() ? "${database}/protein" : "${database}"
+    def esm_env = params.esm ? """
+    export HUGGINGFACE_HUB_CACHE="${esm_cache}"
+    export HF_HUB_CACHE="${esm_cache}"
+    export HF_HUB_OFFLINE=1
+    export TRANSFORMERS_OFFLINE=1
+    export HF_HUB_DISABLE_XET=1
+    """ : ""
     """
+    ${esm_env}
     orf --threads ${task.cpus} blast \\
     --fasta $sequence \\
     --bed $bed \\
