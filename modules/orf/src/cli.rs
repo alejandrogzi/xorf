@@ -182,6 +182,14 @@ pub struct BlastArgs {
     pub prefix: String,
 
     #[arg(
+        short = 'E',
+        long = "esm",
+        help = "Add CPU ESMFold2-Fast mean pLDDT scores",
+        action = clap::ArgAction::SetTrue
+    )]
+    pub esm: bool,
+
+    #[arg(
         short = 'K',
         long = "keep-temp",
         help = "Keep temporary files",

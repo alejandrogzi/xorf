@@ -31,6 +31,7 @@ if (params.help) {
     Github:  ${workflow.manifest.homePage}
 
     Usage (full run):
+        mamba activate nextflow
         nextflow run main.nf \\
             --regions        /path/to/regions.{bed, gtf, gff} \\
             --sequence       /path/to/genome.{fa, 2bit, fa.gz} \\
@@ -47,6 +48,8 @@ if (params.help) {
     Optional parameters (common):
         --outdir              PATH    Output directory [default: ./results]
         --engine              STRING  BLAST engine: diamond or mmseqs2 [default: diamond]
+        --esm                 BOOL    Add CPU ESMFold2-Fast mean pLDDT scores [default: false]
+        --esmfold_local_weights PATH  Local Hugging Face hub cache; skips DOWNLOAD_ESMFOLD_WEIGHTS [default: null]
         --custom_database     PATH    Path to custom database [default: null]:
                                       diamond: .dmnd/.dmnd.gz replaces the default database;
                                       fasta (.fa/.fasta/.fa.gz/.fasta.gz) is appended to raw_database
@@ -86,6 +89,7 @@ if (params.help) {
 include { EMAIL }        from './modules/email/main.nf'
 include { XORF as MAIN }         from './subworkflows/xorf/main.nf'
 include { WGET as WGET_SAMBA_WEIGHTS } from './modules/wget/main.nf'
+include { DOWNLOAD_ESMFOLD_WEIGHTS } from './modules/esmfold/main.nf'
 include { UNTAR } from './modules/untar/main.nf'
 include { WGET as WGET_PROTEIN_DATABASE } from './modules/wget/main.nf'
 include { WGET as WGET_MMSEQS_FASTA } from './modules/wget/main.nf'
@@ -110,6 +114,16 @@ def validateRun() {
     }
     if (params.engine == 'mmseqs2' && params.custom_database && isDiamondDb(params.custom_database)) {
         errors << "  --engine mmseqs2 cannot use a diamond .dmnd database; pass FASTA or omit custom_database"
+    }
+    if (params.esm && params.esmfold_local_weights) {
+        def weights = file(params.esmfold_local_weights)
+        if (!weights.exists()) {
+            errors << "  --esmfold_local_weights does not exist: ${params.esmfold_local_weights}"
+        } else if (!weights.isDirectory()) {
+            errors << "  --esmfold_local_weights must be a Hugging Face hub cache directory"
+        } else if (!file("${weights}/models--biohub--ESMFold2-Fast").exists() || !file("${weights}/models--biohub--ESMC-6B").exists()) {
+            errors << "  --esmfold_local_weights is not a Hugging Face hub cache (need models--biohub--ESMFold2-Fast and models--biohub--ESMC-6B); pass the published esmfold_cache directory or \$HF_HOME/hub"
+        }
     }
 
     if (errors) {
@@ -220,6 +234,30 @@ workflow XORF {
 
     /*
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        ESMFOLD WEIGHTS
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    */
+
+    ch_esm_weights = Channel.empty()
+    ch_esm_versions = Channel.empty()
+    if (params.esm) {
+        if (params.esmfold_local_weights) {
+            ch_esm_weights = Channel.value(
+                file(params.esmfold_local_weights, checkIfExists: true)
+            )
+        } else {
+            DOWNLOAD_ESMFOLD_WEIGHTS(
+                file("${projectDir}/../modules/orf/src/esmfold2_fast.py", checkIfExists: true)
+            )
+            ch_esm_weights = DOWNLOAD_ESMFOLD_WEIGHTS.out.cache
+            ch_esm_versions = DOWNLOAD_ESMFOLD_WEIGHTS.out.versions
+        }
+    } else {
+        ch_esm_weights = Channel.value(file("${projectDir}/params.json"))
+    }
+
+    /*
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
         PROTEIN DATABASE
     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     */
@@ -325,6 +363,7 @@ workflow XORF {
        params.outdir,
        params.chunk_size,
        ch_samba_weights,
+       ch_esm_weights,
        params.predict_keep_raw,
        params.selenocysteine_sites,
        params.skip_netstart,
@@ -334,7 +373,7 @@ workflow XORF {
        params.run_only_on,
        params.run_only_mode,
        params.run_only_target,
-       ch_database_versions
+       ch_database_versions.mix(ch_esm_versions)
     )
 
     /*

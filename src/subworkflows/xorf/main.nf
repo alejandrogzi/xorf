@@ -60,6 +60,7 @@ workflow XORF {
       output_dir     // path
       chunk_size     // int
       samba_weights  // channel: [ meta, path ]
+      esm_weights          // channel: path (HF hub cache dir, or dummy when !params.esm)
       predict_keep_raw     // boolean
       selenocysteine_sites // path
       skip_netstart        // boolean
@@ -341,6 +342,7 @@ workflow XORF {
           ch_pairs,
           ch_database,
           samba_weights,
+          esm_weights,
           skip_netstart
       )
 

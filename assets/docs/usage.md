@@ -82,6 +82,9 @@ You need:
 | Docker **or** Apptainer **or** Singularity | used to run the tools in containers |
 | The repository | `git clone https://github.com/hillerlab/xorf.git && cd xorf` |
 
+In the provided environment, make Nextflow available first with
+`mamba activate nextflow`.
+
 ### Input files
 
 | File | What it is | Accepted formats | Required? |
@@ -179,6 +182,8 @@ settings belong in `params.json`.
 | Parameter | Type | Default | What it does |
 |---|---|---|---|
 | `engine` | string | `diamond` | BLAST search engine: `diamond` or `mmseqs2`. |
+| `esm` | boolean | `false` | Add mean ESMFold2-Fast pLDDT (0–100) to BLAST output. V1 runs locally on CPU in FP32. When true, `DOWNLOAD_ESMFOLD_WEIGHTS` prefetches the pinned Hugging Face hub cache once and every BLAST task reuses it. |
+| `esmfold_local_weights` | path | `null` | Path to a local Hugging Face hub cache containing `models--biohub--ESMFold2-Fast` and `models--biohub--ESMC-6B`. Set this with `esm` to skip `DOWNLOAD_ESMFOLD_WEIGHTS`. |
 | `database` | URL | Zenodo UniProt/SwissProt (DIAMOND) | URL the pipeline downloads the protein database from. Only used when `engine` is `diamond` and `custom_database` is not set. |
 | `raw_database` | URL | UniProt/SwissProt sequences (`uniprot_sprot.fasta.gz`) | Raw protein FASTA. Used as the default when `engine` is `mmseqs2`, and as the sequences a FASTA `custom_database` is appended to. |
 | `custom_database` | path | `null` | **Your own** database. Give a DIAMOND database (`.dmnd`, optionally `.dmnd.gz`) to *replace* the default (diamond engine only), or a FASTA file (`.fa`, `.fasta`, optionally gzipped) to *append* to SwissProt — xorf merges the sequences and rebuilds the engine's database on the fly. |
@@ -197,6 +202,14 @@ Use `custom_database` if you want to:
   appended to (e.g. full UniProt instead of SwissProt).
 
 Any other `custom_database` extension stops the pipeline with a clear error.
+
+ESMFold2-Fast uses the ESMC-6B backbone (~26 GB hub cache, ~26 GB RAM, CPU
+FP32). BLAST is a `process_high_memory` task (4 CPUs, 30 GB, 10 h) so the
+ordinary `process_low` defaults are left alone. The pipeline downloads the
+pinned checkpoints once (`DOWNLOAD_ESMFOLD_WEIGHTS`) and publishes them to
+`${outdir}/00_weights/esmfold_cache`. Set `esmfold_local_weights` to that
+directory — or to `$HF_HOME/hub` — to skip the download on later runs. Do not
+pass a raw `HF_HOME` (the parent of `hub/`).
 
 ### RNASamba
 

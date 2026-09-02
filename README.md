@@ -76,7 +76,8 @@ features       └──────┘       └──────────�
 ## Usage
 
 > [!NOTE]
-> Requirements: Nextflow ≥ 25.04.6, Docker or Apptainer, Java.
+> Requirements: Nextflow ≥ 25.04.6, Docker or Apptainer, Java. In the provided
+> environment, run `mamba activate nextflow` before invoking Nextflow.
 
 ```bash
 git clone https://github.com/hillerlab/xorf.git
@@ -91,6 +92,13 @@ nextflow run main.nf -params-file params.json -profile docker
 # Apptainer / Singularity
 nextflow run main.nf -params-file params.json -profile apptainer
 ```
+
+Set `esm` to `true` (or pass `--esm true`) to add CPU ESMFold2-Fast mean pLDDT
+scores. The pipeline downloads the pinned model and ESMC-6B backbone once
+(`DOWNLOAD_ESMFOLD_WEIGHTS`), publishes the hub cache under
+`results/00_weights/esmfold_cache`, and reuses it in every BLAST task. It does
+not use a GPU. Set `esmfold_local_weights` to that published directory (or to
+`$HF_HOME/hub`) to skip the download.
 
 Smoke test:
 ```bash
@@ -142,4 +150,3 @@ results/
 |------|------|
 | `params.json` | Genome paths, alignment settings, checkpoints — per run |
 | `nextflow.config` | Compute resources, profiles, container, SLURM — rarely |
-

@@ -30,6 +30,9 @@ use crate::{
     utils::*,
 };
 
+const ESMFOLD2_FAST: &str = include_str!("esmfold2_fast.py");
+const ESMFOLD2_MAX_LEN: usize = 2048;
+
 /// Run diamont on the a nested orfipy input + translationAi fasta
 ///
 /// # Arguments
@@ -85,7 +88,15 @@ pub fn run_blast(args: BlastArgs, threads: usize) {
         args.prefix.clone(),
     );
 
-    __run_diamond_and_psauron(table, args.database, &dir, args.prefix, args.engine, threads);
+    __run_diamond_and_psauron(
+        table,
+        args.database,
+        &dir,
+        args.prefix,
+        args.engine,
+        args.esm,
+        threads,
+    );
 
     if !args.keep_temp {
         println!("INFO: removing temporary files in {dir:?}");
@@ -212,6 +223,7 @@ fn __run_diamond_and_psauron(
     outdir: &Path,
     prefix: String,
     engine: Engine,
+    esm: bool,
     threads: usize,
 ) {
     let blasting = match engine {
@@ -289,6 +301,7 @@ fn __run_diamond_and_psauron(
     }
 
     let psauron_predictions = read_psauron(psauron);
+    let esm_predictions = esm.then(|| run_esmfold2_fast(&orfs, outdir, &prefix, threads, &table));
 
     let mut writer = BufWriter::new(
         File::create(blasting.with_extension(RESULT)).unwrap_or_else(|e| {
@@ -319,17 +332,31 @@ fn __run_diamond_and_psauron(
 
         for line in lines {
             let blast = BlastRecord::from_parts(&parts);
-            let output = format!(
-                "{}\t{:.2}\t{:e}\t{}\t{}\t{}\t{}\t{}\n",
-                line,
-                blast.blast_pid,
-                blast.blast_e_value,
-                blast.blast_offset,
-                blast.blast_alignment_len,
-                blast.percent_aligned,
-                psauron_score,
-                blast.reference_id
-            );
+            let output = match &esm_predictions {
+                Some(scores) => format!(
+                    "{}\t{:.2}\t{:e}\t{}\t{}\t{}\t{}\t{:.4}\t{}\n",
+                    line,
+                    blast.blast_pid,
+                    blast.blast_e_value,
+                    blast.blast_offset,
+                    blast.blast_alignment_len,
+                    blast.percent_aligned,
+                    psauron_score,
+                    scores[&u_header],
+                    blast.reference_id
+                ),
+                None => format!(
+                    "{}\t{:.2}\t{:e}\t{}\t{}\t{}\t{}\t{}\n",
+                    line,
+                    blast.blast_pid,
+                    blast.blast_e_value,
+                    blast.blast_offset,
+                    blast.blast_alignment_len,
+                    blast.percent_aligned,
+                    psauron_score,
+                    blast.reference_id
+                ),
+            };
 
             writer.write_all(output.as_bytes()).unwrap_or_else(|e| {
                 panic!("ERROR: failed to write to file -> {e}");
@@ -343,7 +370,13 @@ fn __run_diamond_and_psauron(
     for (u_header, lines) in table.iter() {
         if let Some(psauron_score) = psauron_predictions.get(u_header) {
             for line in lines {
-                let output = format!("{}\t0\t1\t0\t0\t0\t{}\tUNKNOWN\n", line, psauron_score);
+                let output = match &esm_predictions {
+                    Some(scores) => format!(
+                        "{}\t0\t1\t0\t0\t0\t{}\t{:.4}\tUNKNOWN\n",
+                        line, psauron_score, scores[u_header]
+                    ),
+                    None => format!("{}\t0\t1\t0\t0\t0\t{}\tUNKNOWN\n", line, psauron_score),
+                };
 
                 writer.write_all(output.as_bytes()).unwrap_or_else(|e| {
                     panic!("ERROR: failed to write to file -> {e}");
@@ -351,7 +384,13 @@ fn __run_diamond_and_psauron(
             }
         } else {
             for line in lines {
-                let output = format!("{}\t0\t1\t0\t0\t0\t0.0\tUNKNOWN\n", line);
+                let output = match &esm_predictions {
+                    Some(scores) => format!(
+                        "{}\t0\t1\t0\t0\t0\t0.0\t{:.4}\tUNKNOWN\n",
+                        line, scores[u_header]
+                    ),
+                    None => format!("{}\t0\t1\t0\t0\t0\t0.0\tUNKNOWN\n", line),
+                };
 
                 writer.write_all(output.as_bytes()).unwrap_or_else(|e| {
                     panic!("ERROR: failed to write to file -> {e}");
@@ -359,6 +398,193 @@ fn __run_diamond_and_psauron(
             }
         }
     }
+}
+
+fn sanitize_esmfold2_sequence(sequence: &str) -> String {
+    sequence
+        .trim_end_matches('*')
+        .chars()
+        .map(|aa| if aa == '*' { 'X' } else { aa })
+        .collect()
+}
+
+fn parse_numeric_fasta(contents: &str) -> Result<Vec<(usize, String)>, String> {
+    let mut records = Vec::new();
+    let mut current_id = None;
+    let mut sequence = String::new();
+
+    for raw_line in contents.lines() {
+        let line = raw_line.trim();
+        if line.is_empty() {
+            continue;
+        }
+        if let Some(header) = line.strip_prefix('>') {
+            if let Some(seq_idx) = current_id.take() {
+                if sequence.is_empty() {
+                    return Err(format!("empty sequence for FASTA ID {seq_idx}"));
+                }
+                records.push((seq_idx, std::mem::take(&mut sequence)));
+            }
+            current_id = Some(
+                header
+                    .split_whitespace()
+                    .next()
+                    .ok_or_else(|| "empty FASTA header".to_string())?
+                    .parse::<usize>()
+                    .map_err(|_| format!("non-numeric FASTA header: {header}"))?,
+            );
+        } else if current_id.is_some() {
+            sequence.push_str(line);
+        } else {
+            return Err("sequence before first FASTA header".to_string());
+        }
+    }
+
+    if let Some(seq_idx) = current_id {
+        if sequence.is_empty() {
+            return Err(format!("empty sequence for FASTA ID {seq_idx}"));
+        }
+        records.push((seq_idx, sequence));
+    }
+
+    Ok(records)
+}
+
+fn parse_esmfold2_scores(contents: &str) -> Result<HashMap<usize, f32>, String> {
+    let mut scores = HashMap::new();
+    for line in contents.lines().filter(|line| !line.trim().is_empty()) {
+        let mut fields = line.split('\t');
+        let seq_idx = fields
+            .next()
+            .ok_or_else(|| format!("missing sequence ID in score row: {line}"))?
+            .parse::<usize>()
+            .map_err(|_| format!("non-numeric sequence ID in score row: {line}"))?;
+        let score = fields
+            .next()
+            .ok_or_else(|| format!("missing pLDDT in score row: {line}"))?
+            .parse::<f32>()
+            .map_err(|_| format!("non-numeric pLDDT in score row: {line}"))?;
+        if fields.next().is_some() {
+            return Err(format!("extra columns in score row: {line}"));
+        }
+        if !score.is_finite() || !(0.0..=100.0).contains(&score) {
+            return Err(format!("pLDDT outside 0..100 in score row: {line}"));
+        }
+        if scores.insert(seq_idx, score).is_some() {
+            return Err(format!("duplicate sequence ID in score row: {seq_idx}"));
+        }
+    }
+    Ok(scores)
+}
+
+fn run_esmfold2_fast(
+    orfs: &Path,
+    outdir: &Path,
+    prefix: &str,
+    threads: usize,
+    table: &HashMap<usize, Vec<String>>,
+) -> HashMap<usize, f32> {
+    let input = outdir.join(format!("{prefix}.orf.esmfold2.pep"));
+    let output = outdir.join(format!("{prefix}.orf.esmfold2.tsv"));
+    let script = outdir.join(format!("{prefix}.orf.esmfold2_fast.py"));
+    let records = parse_numeric_fasta(
+        &reader(orfs).unwrap_or_else(|e| panic!("ERROR: failed to read ESMFold2 input -> {e}")),
+    )
+    .unwrap_or_else(|e| panic!("ERROR: invalid deduplicated peptide FASTA -> {e}"));
+    let mut writer = BufWriter::new(
+        File::create(&input)
+            .unwrap_or_else(|e| panic!("ERROR: failed to create ESMFold2 input -> {e}")),
+    );
+    let mut scores = HashMap::new();
+    let mut foldable = 0usize;
+    let mut residues = 0usize;
+
+    for (seq_idx, sequence) in &records {
+        let sequence = sanitize_esmfold2_sequence(sequence);
+        if sequence.len() > ESMFOLD2_MAX_LEN {
+            let representative = table
+                .get(seq_idx)
+                .and_then(|lines| lines.first())
+                .and_then(|line| line.split('\t').nth(3))
+                .unwrap_or("UNKNOWN");
+            warn!(
+                "ESMFold2-Fast skipped {representative} (sequence {seq_idx}, {} aa > {ESMFOLD2_MAX_LEN}); assigning 0",
+                sequence.len()
+            );
+            scores.insert(*seq_idx, 0.0);
+            continue;
+        }
+        if sequence.is_empty() {
+            panic!("ERROR: ESMFold2 sequence {seq_idx} is empty after sanitization");
+        }
+        writeln!(writer, ">{seq_idx}\n{sequence}")
+            .unwrap_or_else(|e| panic!("ERROR: failed to write ESMFold2 input -> {e}"));
+        foldable += 1;
+        residues += sequence.len();
+    }
+    drop(writer);
+
+    let started = std::time::Instant::now();
+    if foldable > 0 {
+        std::fs::write(&script, ESMFOLD2_FAST)
+            .unwrap_or_else(|e| panic!("ERROR: failed to write ESMFold2 helper -> {e}"));
+        let status = std::process::Command::new("python")
+            .arg(&script)
+            .arg(&input)
+            .arg(&output)
+            .arg(threads.to_string())
+            .status()
+            .unwrap_or_else(|e| panic!("ERROR: failed to start ESMFold2-Fast -> {e}"));
+        if !status.success() {
+            panic!("ERROR: ESMFold2-Fast exited with status {status}");
+        }
+
+        let inferred = parse_esmfold2_scores(
+            &reader(&output)
+                .unwrap_or_else(|e| panic!("ERROR: failed to read ESMFold2 scores -> {e}")),
+        )
+        .unwrap_or_else(|e| panic!("ERROR: invalid ESMFold2 score output -> {e}"));
+        for (seq_idx, score) in inferred {
+            if scores.insert(seq_idx, score).is_some() {
+                panic!("ERROR: duplicate ESMFold2 score for sequence {seq_idx}");
+            }
+        }
+    }
+
+    for seq_idx in table.keys() {
+        if !scores.contains_key(seq_idx) {
+            panic!("ERROR: missing ESMFold2 score for sequence {seq_idx}");
+        }
+    }
+    if scores.len() != table.len() {
+        panic!(
+            "ERROR: ESMFold2 returned {} scores for {} deduplicated sequences",
+            scores.len(),
+            table.len()
+        );
+    }
+
+    let elapsed = started.elapsed().as_secs_f64();
+    let rate = if elapsed > 0.0 {
+        foldable as f64 / elapsed
+    } else {
+        0.0
+    };
+    let residue_rate = if elapsed > 0.0 {
+        residues as f64 / elapsed
+    } else {
+        0.0
+    };
+    println!(
+        "INFO: ESMFold2-Fast summary: {} deduplicated, {} folded, {} skipped, {:.2}s, {:.2} proteins/s, {:.2} residues/s",
+        records.len(),
+        foldable,
+        records.len() - foldable,
+        elapsed,
+        rate,
+        residue_rate
+    );
+    scores
 }
 
 /// Reads the psauron output and converts it to a hashmap of `PsauronRecord`s
@@ -2135,5 +2361,28 @@ mod tests {
         assert_eq!(record.blast_alignment_len, 141);
         assert!((record.percent_aligned - (141.0 / 142.0 * 100.0)).abs() < 0.01);
         assert_eq!(record.reference_id, "KIF3C_RAT");
+    }
+
+    #[test]
+    fn esmfold2_input_and_score_protocol() {
+        for (input, expected) in [
+            ("ABC*", "ABC"),
+            ("AB*C", "ABXC"),
+            ("AB*C*", "ABXC"),
+            ("A**BC*", "AXXBC"),
+        ] {
+            assert_eq!(sanitize_esmfold2_sequence(input), expected);
+        }
+
+        let boundary = format!(">7\n{}*\n>8\n{}\n", "A".repeat(2048), "A".repeat(2049));
+        let records = parse_numeric_fasta(&boundary).unwrap();
+        assert_eq!(sanitize_esmfold2_sequence(&records[0].1).len(), 2048);
+        assert_eq!(sanitize_esmfold2_sequence(&records[1].1).len(), 2049);
+
+        let scores = parse_esmfold2_scores("7\t81.2500\n8\t0.0000\n").unwrap();
+        assert_eq!(scores[&7], 81.25);
+        assert_eq!(scores[&8], 0.0);
+        assert!(parse_esmfold2_scores("7\tNaN\n").is_err());
+        assert!(parse_esmfold2_scores("7\t50\n7\t51\n").is_err());
     }
 }
